@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Text → BPMN — Guideline-to-BPMN demo</title>
+
+<!-- bpmn-js viewer (CDN) -->
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/diagram-js.css" />
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-js.css" />
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-font/css/bpmn.css" />
+<style>
+  :root { --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; color:#94a3b8; font-size:12px; }
+  .wrap { display:grid; grid-template-columns:380px 1fr; gap:16px; padding:16px; align-items:start; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  textarea { width:100%; height:260px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:10px; font:13px/1.45 ui-monospace,Menlo,Consolas,monospace; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  input[type=text]{ flex:1; border:1px solid var(--line); border-radius:8px; padding:8px; }
+  button { border:0; border-radius:8px; padding:9px 14px; font-weight:600; cursor:pointer; }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#eef2ff; color:var(--accent); }
+  label.file { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--muted); }
+  #right { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  #canvas { height:520px; background:#fff; border:1px solid var(--line); border-radius:10px; }
+  .badges { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .b-ok { background:#dcfce7; color:var(--ok); }
+  .b-bad { background:#fee2e2; color:var(--bad); }
+  .b-info { background:#e0e7ff; color:#3730a3; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { background:#f1f5f9; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:6px; background:#f1f5f9; font-size:11px; font-weight:600; }
+  .tag.Decision,.tag.Gateway { background:#fef3c7; }
+  .tag.Start { background:#dcfce7; } .tag.End { background:#fee2e2; }
+  .muted { color:var(--muted); }
+  .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; white-space:pre-wrap; }
+  details summary { cursor:pointer; font-weight:600; color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media(max-width:900px){ .wrap{ grid-template-columns:1fr; } .grid2{ grid-template-columns:1fr; } }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg);} }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .toolbar button { background:#f1f5f9; color:#334155; font-size:12px; padding:5px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Natural-language process → BPMN</h1>
+  <p>Paste a process description or upload a text file, then Generate. Extraction → IR → deterministic BPMN 2.0 (+ DMN).</p>
+</header>
+
+<div class="wrap">
+  <!-- INPUT -->
+  <div class="card">
+    <h2>Input</h2>
+    <textarea id="text" placeholder="Describe the process in natural language, or upload a .txt/.md file…"></textarea>
+    <div class="row">
+      <input type="text" id="pname" placeholder="Process name (optional)" />
+    </div>
+    <div class="row">
+      <label class="file">📄 Upload file<input id="file" type="file" accept=".txt,.md,.markdown,.text" hidden /></label>
+      <button class="ghost" id="sample" type="button">Load sample</button>
+      <button class="primary" id="gen" type="button">Generate</button>
+    </div>
+    <div class="row muted" id="status"></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="right">
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">BPMN diagram</h2>
+        <div>
+          <button id="fit" type="button">Fit</button>
+          <button id="dl" type="button">Download .bpmn</button>
+        </div>
+      </div>
+      <div class="badges" id="badges"></div>
+      <div id="canvas"></div>
+      <div id="diagram-msg" class="muted" style="margin-top:8px">Diagram will appear here after Generate.</div>
+    </div>
+    <div id="resources"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.development.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+let viewer = null, lastBpmn = null;
+
+const SAMPLE = `# BPH medical treatment
+
+When benign prostatic hyperplasia (BPH) is confirmed at the first urological
+assessment, the urologist prescribes medical treatment: finasteride or an
+alpha-blocker.
+
+Follow-up is performed by the family physician: after one month for
+alpha-blocker treatment and after three months for finasteride. At follow-up
+the family physician assesses the medical history and IPSS.
+
+If treatment is ineffective — less than a 25% improvement in IPSS — treatment is
+discontinued and the patient is referred back to the urologist. If treatment is
+effective — at least a 25% improvement in IPSS — it is continued with annual
+follow-up.`;
+
+$('#sample').onclick = () => { $('#text').value = SAMPLE; $('#pname').value = 'BPH medical treatment'; };
+
+$('#file').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { $('#text').value = r.result; $('#status').textContent = `Loaded ${f.name}`; };
+  r.readAsText(f);
+};
+
+function ensureViewer() {
+  if (!viewer) viewer = new BpmnJS({ container: '#canvas' });
+  return viewer;
+}
+
+$('#fit').onclick = () => viewer && viewer.get('canvas').zoom('fit-viewport');
+$('#dl').onclick = () => {
+  if (!lastBpmn) return;
+  const blob = new Blob([lastBpmn], { type: 'application/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'process.bpmn'; a.click();
+};
+
+async function generate() {
+  const text = $('#text').value.trim();
+  if (!text) { $('#status').textContent = 'Please enter or upload some text.'; return; }
+  $('#gen').disabled = true;
+  $('#status').innerHTML = '<span class="spinner"></span> Generating… (extraction → IR → BPMN)';
+  $('#resources').innerHTML = ''; $('#badges').innerHTML = '';
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, process_name: $('#pname').value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    await render(data);
+    $('#status').textContent = `Done · run ${data.run_id} · ${data.provider}`;
+  } catch (err) {
+    $('#diagram-msg').innerHTML = '';
+    $('#resources').innerHTML = `<div class="card"><div class="err">Generation failed:\n${err.message}</div></div>`;
+    $('#status').textContent = 'Failed.';
+  } finally {
+    $('#gen').disabled = false;
+  }
+}
+$('#gen').onclick = generate;
+
+async function render(data) {
+  // Diagram
+  lastBpmn = data.bpmn_xml;
+  $('#diagram-msg').textContent = '';
+  try {
+    await ensureViewer().importXML(data.bpmn_xml);
+    viewer.get('canvas').zoom('fit-viewport');
+  } catch (e) {
+    $('#diagram-msg').innerHTML = `<div class="err">Could not render BPMN: ${e.message}</div>`;
+  }
+
+  // Badges
+  const v = data.validation, c = data.resources.counts;
+  const badge = (ok, label) => `<span class="badge ${ok ? 'b-ok' : 'b-bad'}">${ok ? '✓' : '✕'} ${label}</span>`;
+  $('#badges').innerHTML =
+    badge(v.bpmn_valid, 'BPMN valid') +
+    badge(v.connectivity_ok, 'Connected') +
+    (v.dmn_valid === null ? '' : badge(v.dmn_valid, 'DMN valid')) +
+    `<span class="badge b-info">${c.nodes} nodes · ${c.flows} flows</span>`;
+
+  // Resources
+  renderResources(data.resources);
+}
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+function renderResources(r) {
+  const actors = r.actors.length
+    ? `<div class="chips">${r.actors.map(a=>`<span class="chip">🧑‍⚕️ ${esc(a)}</span>`).join('')}</div>`
+    : '<span class="muted">none detected</span>';
+
+  const elementRows = r.elements.map(e => `
+    <tr>
+      <td><span class="tag ${esc(e.type)}">${esc(e.type)}${e.gateway_kind?(' · '+esc(e.gateway_kind)):''}</span></td>
+      <td>${esc(e.name)}</td>
+      <td class="muted">${esc(e.actor||'')}</td>
+      <td>${(e.thresholds||[]).concat(e.temporal||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join(' ')}</td>
+    </tr>`).join('');
+
+  const evidenceRows = r.evidence.map(e => `
+    <tr><td class="muted">${esc(e.id)}</td><td class="muted">${esc(e.section||'')}</td><td>${esc(e.text)}</td></tr>
+  `).join('');
+
+  const termRows = r.terminology.flatMap(a => a.mappings.map(m => `
+    <tr>
+      <td>${esc(m.surface_form)}</td>
+      <td>${esc(m.normalized_label||'—')}</td>
+      <td>${m.ontology?`<span class="tag">${esc(m.ontology)} ${esc(m.concept_id||'')}</span>`:'<span class="muted">no match</span>'}</td>
+      <td class="muted">${esc(m.match_type)} · ${(m.confidence*100||0).toFixed(0)}%</td>
+    </tr>`)).join('');
+
+  const decisions = r.decisions.map(d => `
+    <details ${r.decisions.length===1?'open':''} style="margin-top:8px">
+      <summary>DMN · ${esc(d.name)}</summary>
+      <table style="margin-top:6px">
+        <tr>${d.inputs.map(i=>`<th>${esc(i)}</th>`).join('')}<th>result</th></tr>
+        ${d.rules.map(rule=>`<tr>${d.inputs.map(i=>`<td>${esc(rule.inputs[i]||'-')}</td>`).join('')}<td><b>${esc(rule.output)}</b></td></tr>`).join('')}
+      </table>
+    </details>`).join('');
+
+  $('#resources').innerHTML = `
+    <div class="card">
+      <h2>Extracted resources</h2>
+      <p class="muted" style="margin-top:-4px">${r.counts.evidence} evidence items · ${r.counts.elements} elements · ${r.counts.relations} relations</p>
+      <h2 style="margin-top:14px">Actors / lanes</h2>${actors}
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Process elements</h2>
+        <table><tr><th>Type</th><th>Name</th><th>Actor</th><th>Conditions</th></tr>${elementRows}</table>
+      </div>
+      <div class="card">
+        <h2>Terminology grounding</h2>
+        ${termRows ? `<table><tr><th>Term</th><th>Normalized</th><th>Ontology</th><th>Match</th></tr>${termRows}</table>` : '<span class="muted">no terms mapped</span>'}
+        ${decisions}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Evidence (source-anchored)</h2>
+      <table><tr><th>ID</th><th>Section</th><th>Statement</th></tr>${evidenceRows}</table>
+    </div>`;
+}
+</script>
+</body>
+</html>

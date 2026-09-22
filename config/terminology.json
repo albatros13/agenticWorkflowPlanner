@@ -1,0 +1,16 @@
+{
+  "description": "Configurable surface-form -> controlled-vocabulary mappings. Seed set for the prostate/BPH pathway; extend or replace per deployment. No match is required when none exists.",
+  "mappings": [
+    {"surface_form": "PSA", "normalized_label": "Prostate specific antigen [Mass/volume] in Serum or Plasma", "ontology": "LOINC", "concept_id": "2857-1", "match_type": "exact", "confidence": 0.98},
+    {"surface_form": "IPSS", "normalized_label": "International Prostate Symptom Score", "ontology": "SNOMED CT", "concept_id": "444252009", "match_type": "exact", "confidence": 0.95},
+    {"surface_form": "finasteride", "normalized_label": "finasteride", "ontology": "RxNorm", "concept_id": "4325", "match_type": "exact", "confidence": 0.99},
+    {"surface_form": "alpha-blockers", "normalized_label": "Alpha-adrenergic blocking agents", "ontology": "ATC", "concept_id": "G04CA", "match_type": "synonym", "confidence": 0.8},
+    {"surface_form": "digital rectal examination", "normalized_label": "Digital examination of rectum", "ontology": "SNOMED CT", "concept_id": "302380004", "match_type": "exact", "confidence": 0.96},
+    {"surface_form": "uroflowmetry", "normalized_label": "Uroflowmetry", "ontology": "SNOMED CT", "concept_id": "252306004", "match_type": "exact", "confidence": 0.95},
+    {"surface_form": "transrectal ultrasound", "normalized_label": "Transrectal ultrasonography of prostate", "ontology": "SNOMED CT", "concept_id": "179988001", "match_type": "synonym", "confidence": 0.82},
+    {"surface_form": "bone scan", "normalized_label": "Bone scan", "ontology": "SNOMED CT", "concept_id": "45153008", "match_type": "exact", "confidence": 0.9},
+    {"surface_form": "radiotherapy", "normalized_label": "Radiotherapy", "ontology": "SNOMED CT", "concept_id": "108290001", "match_type": "exact", "confidence": 0.94},
+    {"surface_form": "radical prostatectomy", "normalized_label": "Radical prostatectomy", "ontology": "SNOMED CT", "concept_id": "176106009", "match_type": "exact", "confidence": 0.94},
+    {"surface_form": "Gleason score", "normalized_label": "Gleason score", "ontology": "SNOMED CT", "concept_id": "385377005", "match_type": "exact", "confidence": 0.93}
+  ]
+}
