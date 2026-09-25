@@ -1,0 +1,19 @@
+
+#########################################################################################################
+# Which frames form a relevant unit of interpretation together?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX co: <http://purl.org/co/> 
+
+
+SELECT ?frameset ?frame WHERE {
+    # The frameset that represents a relevant unit of interpretation should be given as input.
+    VALUES ?frameset { ex:frameset }
+    ?frameset a flint:FrameSet .
+    ?frame a flint:Frame . 
+
+    # All frames that are in the given frameset are returned.
+    ?frameset co:element ?frame .
+}

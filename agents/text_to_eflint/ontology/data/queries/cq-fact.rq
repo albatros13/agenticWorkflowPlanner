@@ -1,0 +1,22 @@
+
+#########################################################################################################
+# What are all aspects on which two states in this normative system can differ?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?fact ?label ?description  WHERE {
+    # Get all simple facts of this normative system. Only simple facts can actually make a difference between two states as complex facts are derived from the simple facts.
+    ?fact a flint:SimpleFact . 
+
+    # If available, include the label and description of the Fact frame
+    OPTIONAL {
+        ?fact rdfs:label ?label .
+        ?fact rdfs:comment ?description .
+    }
+
+}

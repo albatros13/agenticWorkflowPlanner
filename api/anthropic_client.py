@@ -1,8 +1,9 @@
 import base64
+import json
 import os
 from anthropic import Anthropic
 import logging
-from src.content_provider import get_full_paths, encode_image_with_type, get_html_content
+from agents.text_to_bpmn.pipeline.content_provider import get_full_paths, encode_image_with_type, get_html_content
 from anthropic import APIError
 
 DEFAULT_ANTHROPIC = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
@@ -22,6 +23,37 @@ if not ANTHROPIC_API_KEY:
 
 # Initialize Claude client
 llm_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+
+def ask_anthropic_structured(*, task, system, prompt, schema, max_tokens=4096, model=DEFAULT_ANTHROPIC):
+    """Force a single tool call so Claude returns JSON conforming to ``schema``.
+
+    This is the actual LLM call behind the pipeline's ``AnthropicProvider``. It forces
+    structured output by exposing one tool and requiring the model to call it.
+
+    Returns ``(data: dict, raw_text: str, model: str)``. Raises ``RuntimeError`` when the
+    key is missing or the model returns no tool_use block; SDK/API errors propagate.
+    """
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError("ANTHROPIC_API_KEY not set; cannot call Anthropic.")
+    tool = {
+        "name": "emit_" + task,
+        "description": f"Return the structured result for task '{task}'.",
+        "input_schema": schema,
+    }
+    response = llm_client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        tools=[tool],
+        tool_choice={"type": "tool", "name": tool["name"]},
+        messages=[{"role": "user", "content": prompt}],
+        timeout=120,
+    )
+    for block in response.content:
+        if getattr(block, "type", None) == "tool_use":
+            return block.input, json.dumps(block.input), model
+    raise RuntimeError("Anthropic response contained no tool_use block")
 
 
 def ask_anthropic_text_llm(prompt, model=DEFAULT_ANTHROPIC):

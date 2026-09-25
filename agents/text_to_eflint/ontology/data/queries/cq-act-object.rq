@@ -1,0 +1,46 @@
+
+#########################################################################################################
+# Given an act frame, 
+# what must be the case about an object undergoing an instance of the act 
+# in order for that act to be valid?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?act ?object ?objectDescription ?topPreconditions ?preconditionsDescription WHERE {
+    # The act frame should be given as input.
+    VALUES ?act { ex:act }
+    ?act a flint:Act . 
+
+    # The object associated with an instance of the act .
+    OPTIONAL {      
+      ?act flint:hasObject ?object . 
+      # Provide the description of the object for context as the object can be a complex fact.
+      OPTIONAL { ?object rdfs:comment ?objectDescription . } 
+    }
+
+    #If the act has preconditions, that have a SlotCorrespondence to the object of the act in their tree, return the top precondition in that tree.
+    OPTIONAL{
+        ?slotCorrespondence a flint:SlotCorrespondence .
+
+        # Search for all SlotCorrespondences that map the "object" slot of the act
+        ?slotCorrespondence co:element  [
+            flint:slotFromFrame ?act ;
+            flint:slotLabel "object" ;
+        ] .
+      
+        # Get all preconditions from the act
+        ?act flint:hasPrecondition ?topPreconditions .
+
+        # Check all operands of the top precondition 
+        ?topPreconditions (flint:hasOperands/rdf:rest*/rdf:first)* ?preconditions .
+        # Check if the preconditions are included in the mapping to "object".
+        ?slotCorrespondence co:element/flint:slotFromFrame ?preconditions .
+        # Provide the description of the top precondition for context
+        OPTIONAL { ?topPreconditions rdfs:comment ?preconditionsDescription . }
+    }  
+}

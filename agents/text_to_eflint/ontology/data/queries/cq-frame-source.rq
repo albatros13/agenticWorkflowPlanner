@@ -1,0 +1,20 @@
+
+#########################################################################################################
+# Given a frame in an interpretation, 
+# which source passages motivate the inclusion of this frame in the interpretation?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+
+
+SELECT ?frame ?textFragment  WHERE {
+    # A frame should be given as input.
+    VALUES ?frame { ex:frame }
+    ?frame a flint:Frame . 
+    ?textFragment a src:TextFragment .
+
+    # The source passage (text fragment) that motivates the inclusion of this frame in the interpretation is returned.
+    ?frame flint:hasSource ?textFragment .
+}

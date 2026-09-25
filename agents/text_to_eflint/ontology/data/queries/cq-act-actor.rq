@@ -1,0 +1,47 @@
+
+#########################################################################################################
+# Given an act frame,
+# what must be the case about an actor performing an instance of the act in order for that act to be valid?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+
+SELECT ?act ?actor ?actorDescription ?topPreconditions ?preconditionsDescription WHERE {
+    # The act frame should be given as input.
+    VALUES ?act { ex:Act }
+    ?act a flint:Act .
+
+    # If the act has specified an actor, that fact should be returned as an actor.
+    OPTIONAL{ 
+        ?act flint:hasActor ?actor . 
+        # Provide the description of the actor for context as the actor can be a complex fact.
+        OPTIONAL { ?actor rdfs:comment ?actorDescription . }
+
+    } 
+
+    #If the act has preconditions, that have a SlotCorrespondence to the actor of the act in their tree, return the top precondition in that tree.
+    OPTIONAL{
+        ?slotCorrespondence a flint:SlotCorrespondence .
+
+        # Search for all slotCorrespondences that map the "actor" slot of the act
+        ?slotCorrespondence co:element  [
+            flint:slotFromFrame ?act ;
+            flint:slotLabel "actor" ;
+        ] .
+      
+        # Get all preconditions from the act
+        ?act flint:hasPrecondition ?topPreconditions .
+
+        # Check all operands of the top precondition 
+        ?topPreconditions (flint:hasOperands/rdf:rest*/rdf:first)* ?preconditions .
+        # Check if the preconditions are included in the mapping to "actor".
+        ?slotCorrespondence co:element/flint:slotFromFrame ?preconditions .
+        # Provide the description of the precondition for context.
+        OPTIONAL { ?topPreconditions rdfs:comment ?preconditionsDescription . }
+    }  
+}

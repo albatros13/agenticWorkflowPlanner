@@ -1,0 +1,48 @@
+
+#########################################################################################################
+# Given an act frame, 
+# what must be the case about the performance of an action associated with an instance of the act 
+# in order for that act to be valid?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+
+SELECT ?act ?action ?actionDescription ?topPrecondition ?preconditionDescription WHERE {
+    # The act frame should be given as input.
+    VALUES ?act { ex:act }
+    ?act a flint:Act . 
+  
+    # Check if the act has an action defined.
+    OPTIONAL {      
+      ?act flint:hasAction ?action . 
+      # Provide the description of the action for context as the action can be a complex fact.
+      OPTIONAL { ?action rdfs:comment ?actionDescription . } 
+    }
+
+    #If the act has preconditions, that have a SlotCorrespondence to the "action" slot of the act in their tree,
+    # that precondition should be returned as topPrecondition.
+    OPTIONAL{
+        ?slotCorrespondence a flint:SlotCorrespondence .
+
+        # Search for all slotCorrespondences that map the "action" slot of the act
+        ?slotCorrespondence co:element  [
+            flint:slotFromFrame ?act ;
+            flint:slotLabel "action" ;
+        ] .
+      
+        # Get all preconditions from the act
+        ?act flint:hasPrecondition ?topPrecondition .
+
+        # Check all operands of the top precondition 
+        ?topPrecondition (flint:hasOperands/rdf:rest*/rdf:first)* ?precondition .
+        # Check if the preconditions are included in the mapping to "action".
+        ?slotCorrespondence co:element/flint:slotFromFrame ?precondition .
+        # Provide the description of the precondition for context.
+        OPTIONAL { ?topPrecondition rdfs:comment ?preconditionDescription . }
+    }  
+}

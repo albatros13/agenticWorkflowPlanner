@@ -1,0 +1,21 @@
+
+#########################################################################################################
+# How many atoms might be involved in this frame? (What is the arity/degree/valency?)
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?frame (COUNT(?slots) as ?degree) WHERE {
+    # A frame should be given as input.
+    VALUES ?frame { ex:frame }
+    ?frame a flint:Frame .
+
+    # Get all slots from the specified frame. Note that Shacl rules should be inferred to have the action, object, actor and recipient slots added to Acts.
+    ?frame flint:hasSlot ?slots .
+
+}
+GROUP BY ?frame

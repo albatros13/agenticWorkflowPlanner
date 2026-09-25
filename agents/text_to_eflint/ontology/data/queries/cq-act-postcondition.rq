@@ -1,0 +1,27 @@
+
+#########################################################################################################
+# Given an act frame, 
+# what must be the case about the circumstances 
+# after instances of the act have been exercised?
+
+# Note: If shorthands flint:terminates and flint:creates are used, SHACL should be run.
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?act ?frame ?value WHERE {
+    # The act frame should be given as input.
+    VALUES ?act {ex:act} 
+    ?act a flint:Act . 
+    
+    # Get all postconditions of the act.
+    ?act flint:hasPostcondition ?postcondition .
+
+    # Get the frame and the value to return.
+    ?postcondition flint:hasPostconditionFrame ?frame .
+    ?postcondition flint:hasPostconditionValue ?value
+}

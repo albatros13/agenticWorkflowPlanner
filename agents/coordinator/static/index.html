@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agentic Workflow Planner — Coordinator</title>
+
+<!-- bpmn-js viewer (CDN) -->
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/diagram-js.css" />
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-js.css" />
+<link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-font/css/bpmn.css" />
+<style>
+  :root { --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb;
+          --ok:#16a34a; --bad:#dc2626; --user:#2563eb; --bot:#f1f5f9; }
+  * { box-sizing: border-box; }
+  html,body { height:100%; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:17px; font-weight:600; }
+  header .who { display:flex; gap:8px; align-items:center; font-size:12px; color:#94a3b8; }
+  header .who input { background:#1e293b; border:1px solid #334155; color:#e2e8f0; border-radius:6px; padding:5px 8px; font-size:12px; width:190px; }
+
+  .layout { display:grid; grid-template-columns:300px 1fr; gap:14px; padding:14px; height:calc(100vh - 52px); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  h2.title { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+
+  /* Sidebar */
+  #sidebar { display:flex; flex-direction:column; padding:14px; min-height:0; }
+  #sidebar .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  #projects { overflow-y:auto; flex:1; margin:0 -6px; }
+  .proj { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px; cursor:pointer; display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .proj:hover { background:#f8fafc; }
+  .proj.active { border-color:var(--accent); background:#eff6ff; }
+  .proj .name { font-weight:600; font-size:13px; word-break:break-word; }
+  .proj .del { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:15px; line-height:1; padding:2px 4px; border-radius:6px; }
+  .proj .del:hover { background:#fee2e2; color:var(--bad); }
+  .state { display:inline-block; margin-top:3px; padding:1px 8px; border-radius:999px; font-size:10.5px; font-weight:700; background:#e0e7ff; color:#3730a3; letter-spacing:.02em; }
+  .empty { color:var(--muted); font-size:12.5px; padding:10px 6px; }
+
+  button { border:0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#eef2ff; color:var(--accent); font-size:12px; padding:6px 10px; }
+
+  /* Chat */
+  #main { display:flex; flex-direction:column; min-height:0; }
+  #banner { padding:10px 14px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  #banner .pname { font-weight:600; }
+  .chip { background:#f1f5f9; border:1px solid var(--line); border-radius:999px; padding:2px 9px; font-size:11.5px; color:#334155; }
+  .chip.action { cursor:pointer; background:#eff6ff; border-color:#bfdbfe; color:var(--accent); }
+  .chip.action:hover { background:#dbeafe; }
+
+  #log { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:80%; padding:10px 13px; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.user { align-self:flex-end; background:var(--user); color:#fff; border-bottom-right-radius:3px; }
+  .msg.bot  { align-self:flex-start; background:var(--bot); color:#0f172a; border-bottom-left-radius:3px; }
+  .msg.sys  { align-self:center; background:transparent; color:var(--muted); font-size:12.5px; font-style:italic; }
+  .msg .meta { font-size:11px; opacity:.8; margin-bottom:3px; }
+  .msg.bot .meta { color:var(--muted); }
+
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .badge { padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700; }
+  .b-ok { background:#dcfce7; color:var(--ok); } .b-bad { background:#fee2e2; color:var(--bad); }
+  .b-info { background:#e0e7ff; color:#3730a3; }
+
+  .diagram-wrap { margin-top:8px; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff; }
+  .diagram-wrap .bar { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:#f8fafc; border-bottom:1px solid var(--line); }
+  .diagram-wrap .bar button { background:#f1f5f9; color:#334155; font-size:11px; padding:4px 9px; }
+  .canvas { height:320px; }
+
+  .suggests { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .suggests .chip { cursor:pointer; background:#fffbeb; border-color:#fde68a; }
+
+  #composer { border-top:1px solid var(--line); padding:12px 14px; display:flex; gap:10px; align-items:flex-end; }
+  #text { flex:1; resize:none; height:52px; max-height:160px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:14px/1.4 system-ui,sans-serif; }
+  .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--muted); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg);} }
+  @media(max-width:820px){ .layout{ grid-template-columns:1fr; height:auto; } #log{ min-height:300px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧭 Agentic Workflow Planner · Coordinator</h1>
+  <div class="who">
+    <span>User</span>
+    <input id="user" type="text" value="you@example.com" />
+  </div>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="card" id="sidebar">
+    <div class="head">
+      <h2 class="title">Projects</h2>
+      <button class="ghost" id="new">+ New</button>
+    </div>
+    <div id="projects"><div class="empty">Loading…</div></div>
+  </aside>
+
+  <!-- MAIN CHAT -->
+  <section class="card" id="main">
+    <div id="banner"><span class="chip" id="banner-empty">No project selected — describe a process to start one.</span></div>
+    <div id="log"></div>
+    <div class="suggests" id="suggests" style="padding:0 14px"></div>
+    <div id="composer">
+      <textarea id="text" placeholder="Describe a process to engineer, or type an instruction (e.g. 'list my projects', 'refine the model', 'verify')…"></textarea>
+      <button class="primary" id="send">Send</button>
+    </div>
+  </section>
+</div>
+
+<script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.development.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+let activeProjectId = null;
+let activeProjectName = null;
+
+const SAMPLE = `When benign prostatic hyperplasia (BPH) is confirmed at the first urological assessment, the urologist prescribes medical treatment: finasteride or an alpha-blocker. Follow-up is performed by the family physician: after one month for alpha-blocker treatment and after three months for finasteride. At follow-up the family physician assesses the IPSS. If improvement is less than 25%, treatment is discontinued and the patient is referred back to the urologist. If improvement is at least 25%, treatment continues with annual follow-up.`;
+
+const SUGGESTIONS = [
+  { label: '📋 List my projects', text: 'list my projects' },
+  { label: '🧪 Load sample process', text: SAMPLE },
+  { label: '🔍 Find similar', text: 'find similar projects about prostate care' },
+];
+
+function userId() { return $('#user').value.trim() || 'default'; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+// ---- Messages -------------------------------------------------------------
+function addMessage(role, text, meta) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  el.innerHTML = (meta ? `<div class="meta">${esc(meta)}</div>` : '') + esc(text);
+  $('#log').appendChild(el);
+  $('#log').scrollTop = $('#log').scrollHeight;
+  return el;
+}
+
+function renderSuggestions() {
+  $('#suggests').innerHTML = SUGGESTIONS.map((s,i)=>`<span class="chip" data-i="${i}">${esc(s.label)}</span>`).join('');
+  document.querySelectorAll('#suggests .chip').forEach(c => {
+    c.onclick = () => { $('#text').value = SUGGESTIONS[+c.dataset.i].text; $('#text').focus(); };
+  });
+}
+
+// ---- Projects sidebar -----------------------------------------------------
+async function loadProjects() {
+  try {
+    const res = await fetch(`/coordinator/projects?user_id=${encodeURIComponent(userId())}`);
+    const data = await res.json();
+    renderProjects(data.projects || []);
+  } catch (e) {
+    $('#projects').innerHTML = `<div class="empty">Could not load projects: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderProjects(projects) {
+  if (!projects.length) { $('#projects').innerHTML = `<div class="empty">No projects yet. Describe a process below to create one.</div>`; return; }
+  $('#projects').innerHTML = projects.map(p => `
+    <div class="proj ${p.id===activeProjectId?'active':''}" data-id="${esc(p.id)}">
+      <div>
+        <div class="name">${esc(p.name)}</div>
+        <span class="state">${esc(p.state)}</span>
+      </div>
+      <button class="del" data-del="${esc(p.id)}" title="Delete project">✕</button>
+    </div>`).join('');
+  document.querySelectorAll('.proj').forEach(el => {
+    el.onclick = (e) => { if (e.target.closest('.del')) return; selectProject(el.dataset.id); };
+  });
+  document.querySelectorAll('.proj .del').forEach(b => {
+    b.onclick = (e) => { e.stopPropagation(); deleteProject(b.dataset.del); };
+  });
+}
+
+async function selectProject(id) {
+  try {
+    const res = await fetch(`/coordinator/projects/${encodeURIComponent(id)}?user_id=${encodeURIComponent(userId())}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const p = await res.json();
+    activeProjectId = p.id; activeProjectName = p.name;
+    setBanner(p.name, p.state, null);
+    await loadProjects();
+    addMessage('sys', `Opened “${p.name}” · state ${p.state} · ${p.runs.length} run(s)`);
+  } catch (e) { addMessage('sys', 'Could not open project: ' + e.message); }
+}
+
+async function deleteProject(id) {
+  if (!confirm('Delete this project? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/coordinator/projects/${encodeURIComponent(id)}?user_id=${encodeURIComponent(userId())}`, { method:'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (id === activeProjectId) newProject(true);
+    await loadProjects();
+    addMessage('sys', 'Project deleted.');
+  } catch (e) { addMessage('sys', 'Delete failed: ' + e.message); }
+}
+
+function newProject(silent) {
+  activeProjectId = null; activeProjectName = null;
+  setBanner(null);
+  document.querySelectorAll('.proj').forEach(el => el.classList.remove('active'));
+  if (!silent) addMessage('sys', 'Started a fresh session. Describe your process and I will create a new project.');
+}
+
+function setBanner(name, state, actions) {
+  if (!name) { $('#banner').innerHTML = `<span class="chip" id="banner-empty">No project selected — describe a process to start one.</span>`; return; }
+  const acts = (actions || []).map(a => `<span class="chip action" data-act="${esc(a)}">${esc(a)}</span>`).join('');
+  $('#banner').innerHTML =
+    `<span class="pname">📁 ${esc(name)}</span>` +
+    (state ? `<span class="state">${esc(state)}</span>` : '') +
+    (acts ? `<span style="color:var(--muted);font-size:11px">actions:</span>${acts}` : '');
+  document.querySelectorAll('#banner .chip.action').forEach(c => {
+    c.onclick = () => runAction(c.dataset.act);
+  });
+}
+
+// Map a lifecycle action chip to a natural-language instruction.
+const ACTION_TEXT = {
+  createModel:'engineer the process model', refineModel:'refine the model',
+  markModelReadyForVerification:'mark the model ready for verification',
+  startVerification:'verify the model', reviseDescription:'revise the description:',
+  deleteProject:'delete this project', generateImplementation:'generate the implementation',
+};
+function runAction(action) {
+  const text = ACTION_TEXT[action] || action;
+  $('#text').value = text; $('#text').focus();
+}
+
+// ---- Send message ---------------------------------------------------------
+async function send() {
+  const text = $('#text').value.trim();
+  if (!text) return;
+  $('#send').disabled = true;
+  addMessage('user', text);
+  $('#text').value = '';
+  const thinking = addMessage('bot', 'Thinking…', 'coordinator');
+  thinking.innerHTML = '<div class="meta">coordinator</div><span class="spinner"></span> Working…';
+
+  try {
+    const res = await fetch('/coordinator/message', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, user_id: userId(), project_id: activeProjectId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    thinking.remove();
+    handleResponse(data);
+  } catch (e) {
+    thinking.innerHTML = `<div class="meta">coordinator</div>⚠️ ${esc(e.message)}`;
+  } finally {
+    $('#send').disabled = false;
+    $('#text').focus();
+  }
+}
+
+function handleResponse(data) {
+  // Track / refresh the active project.
+  if (data.project) { activeProjectId = data.project.id; activeProjectName = data.project.name; }
+  setBanner(activeProjectName, data.state, data.allowed_actions);
+
+  const bubble = addMessage('bot', data.reply || '(no reply)', `coordinator · intent: ${data.intent}`);
+
+  // Similar-project suggestions.
+  if (data.similar && data.similar.length) {
+    const html = data.similar.map(s => `<span class="chip" data-open="${esc(s.ref.id)}">📁 ${esc(s.ref.name)} · ${esc(s.ref.state)}</span>`).join('');
+    const wrap = document.createElement('div'); wrap.className = 'suggests'; wrap.innerHTML = html;
+    bubble.appendChild(wrap);
+    wrap.querySelectorAll('[data-open]').forEach(c => c.onclick = () => selectProject(c.dataset.open));
+  }
+
+  // Rendered model, if the text→BPMN agent produced one.
+  const out = data.agent_result && data.agent_result.output;
+  if (out && out.bpmn_xml) renderDiagram(bubble, out);
+
+  loadProjects();
+}
+
+// ---- Diagram --------------------------------------------------------------
+let viewerSeq = 0;
+async function renderDiagram(bubble, out) {
+  const id = 'canvas-' + (++viewerSeq);
+  const v = out.validation || {};
+  const c = (out.resources && out.resources.counts) || {};
+  const badge = (ok, label) => `<span class="badge ${ok ? 'b-ok':'b-bad'}">${ok?'✓':'✕'} ${label}</span>`;
+  const badges =
+    (v.bpmn_valid!=null ? badge(v.bpmn_valid,'BPMN valid') : '') +
+    (v.connectivity_ok!=null ? badge(v.connectivity_ok,'Connected') : '') +
+    (v.dmn_valid!=null ? badge(v.dmn_valid,'DMN valid') : '') +
+    (c.nodes!=null ? `<span class="badge b-info">${c.nodes} nodes · ${c.flows} flows</span>` : '');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'diagram-wrap';
+  wrap.innerHTML = `
+    <div class="bar">
+      <div class="badges">${badges}</div>
+      <div><button data-fit>Fit</button> <button data-dl>Download .bpmn</button></div>
+    </div>
+    <div class="canvas" id="${id}"></div>`;
+  bubble.appendChild(wrap);
+  $('#log').scrollTop = $('#log').scrollHeight;
+
+  try {
+    const viewer = new BpmnJS({ container: '#' + id });
+    await viewer.importXML(out.bpmn_xml);
+    viewer.get('canvas').zoom('fit-viewport');
+    wrap.querySelector('[data-fit]').onclick = () => viewer.get('canvas').zoom('fit-viewport');
+  } catch (e) {
+    wrap.querySelector('.canvas').innerHTML = `<div style="padding:12px;color:var(--bad)">Could not render BPMN: ${esc(e.message)}</div>`;
+  }
+  wrap.querySelector('[data-dl]').onclick = () => {
+    const blob = new Blob([out.bpmn_xml], { type:'application/xml' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = (activeProjectName || 'process') + '.bpmn'; a.click();
+  };
+}
+
+// ---- Wiring ---------------------------------------------------------------
+$('#send').onclick = send;
+$('#new').onclick = () => newProject(false);
+$('#user').onchange = () => { newProject(true); loadProjects(); };
+$('#text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+renderSuggestions();
+loadProjects();
+addMessage('sys', 'Welcome! Describe a process to model, or pick a project on the left.');
+</script>
+</body>
+</html>

@@ -15,8 +15,19 @@ dependencies = [
 llm = ["anthropic>=0.40", "openai>=1.50"]
 retrieval = ["qdrant-client>=1.9"]
 bpmn = ["lxml>=5.0", "xmlschema>=3.0", "spiffworkflow>=3.0"]  # used from Phase 5 on
+eflint = ["rdflib>=7.0", "pyshacl>=0.26"]  # text->eFLINT: vendored FLINT ontology + SHACL validation
 provenance = ["neo4j>=5.0"]
 dev = ["pytest>=8.0", "httpx>=0.27"]  # httpx powers the FastAPI TestClient
+
+[tool.setuptools.packages.find]
+# The agents/ tree holds all agent source, incl. the text->BPMN pipeline
+# (agents/text_to_bpmn/pipeline). app/ and api/ are run from the repo root, not installed.
+include = ["agents*"]
+
+[tool.setuptools.package-data]
+# Ship the vendored FLINT ontology data (ttl/rq) + its license notices inside the wheel so
+# importlib.resources can read them when installed. See agents/text_to_eflint/flint/README.md.
+"agents.text_to_eflint.flint" = ["data/**/*.ttl", "data/**/*.rq", "data/**/LICENSE", "VERSION", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

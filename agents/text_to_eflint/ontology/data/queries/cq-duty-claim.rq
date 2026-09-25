@@ -1,0 +1,19 @@
+
+#########################################################################################################
+# Given an interpretation, what kinds of duties might agents hold?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX co: <http://purl.org/co/> 
+
+
+SELECT ?duty WHERE {
+    # The interpretation should be given as input.
+    VALUES ?interpretation { ex:interpretation }
+    ?interpretation a flint:FrameSet .
+    ?duty a flint:Duty . 
+
+    # All duties in the interpretation are returned.
+    ?interpretation co:element ?duty .
+}

@@ -1,0 +1,483 @@
+########################################
+
+#    Copyright 2022 Nederlandse Organisatie voor Toegepast Natuur-
+#     wetenschappelijk Onderzoek TNO / TNO, Netherlands Organisation for 
+#     applied scientific research
+
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+
+#        http://www.apache.org/licenses/LICENSE-2.0
+
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+########################################
+
+# baseURI: http://ontology.tno.nl/normengineering/flint
+# prefix: flint
+
+@prefix : <http://ontology.tno.nl/normengineering/flint#> .
+@prefix calc: <http://ontology.tno.nl/normengineering/calculemus#> .
+@prefix co: <http://purl.org/co/> .
+@prefix src: <http://ontology.tno.nl/normengineering/source#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix flint: <http://ontology.tno.nl/normengineering/flint#> .
+@prefix fno: <https://w3id.org/function/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.tno.nl/normengineering/flint>
+  rdf:type owl:Ontology ;
+  dcterms:title "The FLINT Ontology" ;
+  dcterms:description "First draft for the FLINT ontology." ;
+  owl:versionIRI <http://ontology.tno.nl/normengineering/flint/1.0.0> ;
+  owl:versionInfo "1.0.0" ;
+  sh:declare [
+		sh:prefix "flint" ;
+		sh:namespace "http://ontology.tno.nl/normengineering/flint#";
+	] ;
+ sh:declare [
+		sh:prefix "fno" ;
+		sh:namespace "https://w3id.org/function/ontology#";
+	] ; 
+  sh:declare [
+		sh:prefix "rdf" ;
+		sh:namespace "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+	] ; 
+.
+flint:Act
+  rdf:type owl:Class, sh:NodeShape ;
+  rdfs:comment "Describes an act that can be performed by an actor if its preconditions are met, and which results in creating and/or terminating facts." ;
+  rdfs:label "Act" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Frame ;
+  owl:disjointWith flint:Fact ;
+  sh:rule [
+    rdfs:label "Act frame default slots" ;
+    rdfs:comment "All Act frames have an action, actor, object, and recipient slot." ;
+    a sh:TripleRule ;
+    sh:subject sh:this ;
+    sh:predicate flint:hasSlot ;
+    sh:object [
+      sh:union ("action" "actor" "object" "recipient") ;
+    ] ;
+  ] ;
+  sh:rule [
+    a sh:SPARQLRule ;
+    rdfs:label "Derive postconditions from shorthands" ;
+    rdfs:comment "Derive postcondition value assignments from shorthands flint:creates and flint:terminates." ;
+    sh:prefixes flint: ;
+    sh:construct """
+      CONSTRUCT {
+        $this flint:hasPostcondition [
+          flint:hasPostconditionFrame ?postconditionFrame ;
+          flint:hasPostconditionValue ?truth_value
+        ] .
+      }
+      WHERE {
+        $this ?creates_terminates ?postconditionFrame .
+        FILTER (?creates_terminates IN (flint:creates, flint:terminates))
+        BIND ( IF (?creates_terminates = flint:creates, true, false) AS ?truth_value)
+        FILTER NOT EXISTS {
+          $this flint:hasPostcondition ?postcondition .
+          ?postcondition flint:hasPostconditionFrame ?postconditionFrame .
+          ?postcondition flint:hasPostconditionValue ?truth_value .
+        }
+      }
+    """ ;
+  ] ;
+.
+flint:Action
+  rdf:type owl:Class ;
+  rdfs:comment "The type of action associated with an act (usually corresponds to the verb in the source text)." ;
+  rdfs:label "Action" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+  owl:disjointWith flint:Object ;
+  owl:disjointWith flint:Agent ;
+.
+flint:Agent
+  rdf:type owl:Class ;
+  rdfs:comment "An agent is a duty holder, duty claimant, actor or act recipient." ;
+  rdfs:label "Agent" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+.
+flint:BooleanFact
+  rdf:type owl:Class ;
+  rdfs:comment "A fact frame that, when instantiated, has a boolean datatype." ;
+  rdfs:label "Boolean fact" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf (
+      flint:Fact
+      [ 
+        a owl:Restriction ;
+        owl:onProperty flint:hasInstanceDatatype ;
+        owl:hasValue xsd:boolean ;
+      ]
+    )
+  ] ;
+.
+flint:ComplexFact
+  rdf:type owl:Class ;
+  rdf:type sh:NodeShape ;
+  rdfs:comment "A fact that is built up from one or more other facts, connected by a function." ;
+  rdfs:label "Complex fact" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+  owl:intersectionOf (
+    flint:Fact
+    [
+      rdf:type owl:Restriction ;
+      owl:onProperty flint:hasOperands ;
+      owl:someValuesFrom rdf:List ;
+    ]
+  ) ;
+  sh:rule [
+    a sh:SPARQLRule ;
+    rdfs:comment "Derive frame instance datatype from the output type of its associated function."@en ;
+    sh:prefixes flint:, fno:, rdf:;
+    sh:construct """
+      CONSTRUCT {
+        $this flint:hasInstanceDatatype ?type .
+      }
+      WHERE {
+        $this flint:hasFunction/fno:returns/rdf:first/fno:type ?type .
+      }
+    """ ;
+  ] ;
+.
+flint:ContextualizedFact
+  rdf:type owl:Class ;
+  rdfs:comment "A Fact frame for which at least one slot maps to some other slot due to a given context. The context can be a relation to an Act or the status of the frame as an operand in a ComplexFact." ; 
+  rdfs:label "Contextualized Fact" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+.
+flint:Duty
+  rdf:type owl:Class, sh:NodeShape ;
+  rdfs:comment "Describes a duty that should be performed by a duty holder for the benefit of a claimant. Values of Duty instances are boolean. If a Duty instance is valued as true in a state, it means the claimant holds an expectation towards the duty holder in the relevant state." ;
+  rdfs:label "Duty" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:BooleanFact, flint:SimpleFact ;
+  sh:rule [
+    rdfs:label "Duty frame default slots" ;
+    rdfs:comment "All duties have a duty holder and claimant." ;
+    a sh:TripleRule ;
+    sh:subject sh:this ;
+    sh:predicate flint:hasSlot ;
+    sh:object [
+      sh:union ("duty_holder" "claimant") ;
+    ] ;
+  ] ;
+.
+flint:Fact
+  rdf:type owl:Class ;
+  rdfs:comment "Describes a fact that can serve as precondition, postcondition, agent or object." ;
+  rdfs:label "Fact" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Frame ;
+  owl:disjointWith flint:Act ;
+  owl:equivalentClass [
+    rdfs:comment "A Fact frame is always simple or complex." ;
+    owl:unionOf (
+      flint:SimpleFact
+      flint:ComplexFact
+    ) ;
+  ] ;
+.
+flint:Frame
+  rdf:type owl:Class, sh:NodeShape ;
+  rdfs:comment "An act or fact." ;
+  rdfs:label "Frame" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  owl:equivalentClass [
+    rdfs:comment "A Frame is always an Act or a Fact" ;
+    owl:unionOf (
+      flint:Act
+      flint:Fact
+    ) ;
+  ] ;
+  sh:rule [
+    rdfs:label "Frame source from text fragment" ;
+    rdfs:comment "When a frame has a textfragment, the source of that fragment is a source of the frame." ;
+    a sh:TripleRule ;
+    sh:subject sh:this ;
+    sh:predicate flint:hasSource;
+    sh:object [
+      sh:path (
+        flint:hasTextFragment
+        src:isFragmentOf
+      )
+    ] ;
+  ];
+.
+flint:FrameSet
+  rdf:type owl:Class ;
+  rdfs:comment "A set of Flint frames that form an interpretation." ;
+  rdfs:label "Frame set" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf calc:Interpretation ;
+  rdfs:subClassOf co:Set ;
+  rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty co:element ;
+    owl:allValuesFrom flint:Frame ;
+  ] ;
+  rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty calc:usesOntology ;
+    owl:hasValue <http://ontology.tno.nl/normengineering/flint> ;
+  ] ;
+.
+flint:Postcondition
+  rdf:type owl:Class ;
+  rdfs:comment "Postconditions describe consequences that Acts can have for a resulting normative state. Postconditions assign values to an instance of a Frame as characterized through flint:hasPostconditionFrame, with the value being determined through flint:hasPostconditionValue." ;
+  rdfs:label "Postcondition" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+.
+flint:Object
+  rdf:type owl:Class ;
+  rdfs:comment "The object of an act." ;
+  rdfs:label "Object" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+.
+flint:OperandList
+  rdf:type owl:Class, sh:NodeShape ;
+  rdfs:subClassOf rdf:List ;
+  rdfs:label "Operand list" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "A list containing the operands of some Complex Fact frame." ;
+  sh:property [
+    rdfs:comment "Operands should be Facts or RDF literals" ;
+    sh:path (
+      [ sh:zeroOrMorePath rdf:rest ]
+      rdf:first
+    ) ;
+    sh:or (
+      [ sh:class flint:Fact ]
+      [ sh:nodeKind sh:Literal ]
+    )
+  ] ;
+.
+flint:SimpleFact
+  rdf:type owl:Class ;
+  rdfs:comment "Any fact that is not a complex fact. This can also be an agent or object." ;
+  rdfs:label "Simple fact" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subClassOf flint:Fact ;
+  owl:disjointWith flint:ComplexFact ;
+.
+flint:SlotCorrespondence
+  rdf:type owl:Class ;
+  rdfs:label "Slot correspondence" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "A correspondence between a set of slots, which are identified by flint:SlotReference. The meaning of a correspondence between slots is that whenever the relation between frames is relevant through the execution of an act, the instances of the relevant frames should hold the same atom in these slots. For example, a fact slot correspondence to the actor slot of an act expresses that the atom instantiating the fact slot should also be the atom instantiating the actor of the act when the fact instance is used for a precondition or postcondition of a given act instance." ;
+  rdfs:subClassOf co:Set ;
+  rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty co:element ;
+    owl:allValuesFrom flint:SlotReference ;
+  ] ;
+.
+flint:SlotReference
+  rdf:type owl:Class ;
+  rdfs:label "Slot reference" ;
+  rdfs:comment "A way to reference a slot of a frame." ;
+.
+flint:creates
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Connects acts to those facts that it creates when it is performed." ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Creates" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:SimpleFact ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasInstanceDatatype
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Indicates the datatype of instances of the fact frame." ;
+  rdfs:domain flint:Fact ;
+  rdfs:label "Has instance datatype" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range rdfs:Datatype ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasAction
+  rdf:type owl:ObjectProperty ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Has action" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:Action ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasActor
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "The agent that can perform the act." ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Has actor" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:Agent ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasCreatingSlot
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "The subject Act has a slot with the object label. This slot is used for 'creating new instances' of frames. That is, a creating slot can only be assigned atoms that were not previously assigned to any other frames." ;
+  rdfs:domain flint:Act ;
+  rdfs:label "has creating slot" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  # NB the rdfs:range is inherited from the superproperty.
+  rdfs:subPropertyOf flint:hasSlot ;
+.
+flint:hasFactFrameType
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Points from a contextualized Fact frame to its generic version." ;
+  rdfs:domain flint:ContextualizedFact ;
+  rdfs:label "Has fact frame type" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:Fact ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasFunction
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Connects a complex fact with its associated function." ;
+  rdfs:domain flint:ComplexFact ;
+  rdfs:label "Has function" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range fno:Function ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasObject
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "The object acted upon" ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Has object" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:Object ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasOperands
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Indicates the list of operands that the function of the subject ComplexFact should be applied to." ;
+  rdfs:domain flint:ComplexFact ;
+  rdfs:label "Has operands" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:OperandList ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasPrecondition
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Connects acts to (possibly complex) facts that must be true for the act to be valid." ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Has precondition" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:BooleanFact ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasRecipient
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Recipient or interested party with respect to the act." ;
+  rdfs:domain flint:Act ;
+  rdfs:label "Has recipient" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:range flint:Agent ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasSlot
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "Has slot" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "Property to declare that a frame has a slot with a certain label." ;
+  rdfs:domain flint:Frame ;
+  rdfs:range xsd:string ;
+.
+flint:hasSource
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Connects an act or fact to a structural element of a legal source" ;
+  rdfs:domain flint:Frame ;
+  rdfs:range src:Element ;
+  rdfs:label "Has source" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasTextFragment
+  rdf:type owl:ObjectProperty ;
+  rdfs:comment "Connects an act or fact to a text fragment in a legal source." ;
+  rdfs:domain flint:Frame ;
+  rdfs:range src:TextFragment ;
+  rdfs:label "Has text fragment" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:hasPostcondition
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "Has postcondition" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "Executing an instance of the subject act frame will apply changes to the state according to the object postcondition." ;
+  rdfs:domain flint:Act ;
+  rdfs:range flint:Postcondition ;
+.
+flint:hasPostconditionFrame
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "Postcondition frame" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "The subject postcondition expresses that in a post-transition state, instances of the object ContextualizedFact frame will have some value." ;
+  rdfs:domain flint:Postcondition ;
+  rdfs:range flint:ContextualizedFact , [
+    rdf:type owl:Restriction ;
+    owl:onProperty flint:hasFactFrameType ;
+    owl:someValuesFrom flint:SimpleFact ;
+  ] ;
+.
+flint:hasPostconditionValue
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "Postcondition value" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "The subject postcondition expresses that in a post-transition state, an instance of some fact frame will have the value denoted by the object value expression. The value can either be directly expressed as a literal, or expressed as instances of a Fact frame to which the value should be equal. In the latter case, it can be equal to the value of a SimpleFact or to the outcome of a calculation expressed through a ComplexFact." ;
+  rdfs:domain flint:Postcondition ;
+  rdfs:range [
+    owl:unionOf (
+      rdfs:Literal
+      flint:ContextualizedFact 
+    )
+  ] ;
+.
+flint:slotFromFrame
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "slot from frame" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "The subject SlotReference points to the object Frame." ;
+  rdfs:domain flint:SlotReference ;
+  rdfs:range flint:Frame ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.
+flint:slotLabel
+  rdf:type owl:DataProperty ;
+  rdfs:label "slot label" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "The subject SlotReference points to a string identifying the label of a slot." ;
+  rdfs:domain flint:SlotReference ;
+  rdfs:range xsd:string ;
+  rdfs:subPropertyOf owl:topDataProperty ;
+.
+flint:terminates
+  rdf:type owl:ObjectProperty ;
+  rdfs:label "terminates" ;
+  rdfs:isDefinedBy <http://ontology.tno.nl/normengineering/flint> ;
+  rdfs:comment "Connects acts to those facts that it terminates when it is performed." ;
+  rdfs:domain flint:Act ;
+  rdfs:range flint:SimpleFact ;
+  rdfs:subPropertyOf owl:topObjectProperty ;
+.

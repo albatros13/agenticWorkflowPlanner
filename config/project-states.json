@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "1.0",
+  "name": "ProjectLifecycleStateMachine",
+  "type": "stateMachine",
+  "states": [
+    {
+      "id": "INTENT_CAPTURED",
+      "description": "Project intent exists; description may be incomplete.",
+      "allowedActions": ["createDescription", "reviseDescription", "deleteProject"],
+      "transitions": [
+        { "on": "createDescription", "to": "DESCRIPTION_DRAFTED" }
+      ]
+    },
+    {
+      "id": "DESCRIPTION_DRAFTED",
+      "description": "Natural-language description is coherent enough to start modeling.",
+      "allowedActions": ["createModel", "reviseDescription", "deleteProject"],
+      "transitions": [
+        { "on": "createModel", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "MODEL_IN_PROGRESS",
+      "description": "Workflow model exists and is being refined.",
+      "allowedActions": [
+        "refineModel",
+        "markModelReadyForVerification",
+        "reviseDescription",
+        "deleteProject",
+        "resetProject"
+      ],
+      "transitions": [
+        { "on": "refineModel", "to": "MODEL_IN_PROGRESS" },
+        { "on": "markModelReadyForVerification", "to": "MODEL_READY_FOR_VERIFICATION" },
+        { "on": "resetProject", "to": "INTENT_CAPTURED" }
+      ]
+    },
+    {
+      "id": "MODEL_READY_FOR_VERIFICATION",
+      "description": "Model is stable and ready to be verified by agents.",
+      "allowedActions": [
+        "startVerification",
+        "reviseDescription",
+        "refineModel",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "startVerification", "to": "VERIFICATION_IN_PROGRESS" },
+        { "on": "refineModel", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "VERIFICATION_IN_PROGRESS",
+      "description": "Compliance and other agents are checking the model.",
+      "allowedActions": [
+        "completeVerificationSuccess",
+        "completeVerificationFailure",
+        "cancelVerification",
+        "reviseDescription",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "completeVerificationSuccess", "to": "VERIFIED" },
+        { "on": "completeVerificationFailure", "to": "VERIFICATION_FAILED" },
+        { "on": "cancelVerification", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "VERIFICATION_FAILED",
+      "description": "Verification found blocking issues.",
+      "allowedActions": [
+        "reviseDescription",
+        "refineModel",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "refineModel", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "VERIFIED",
+      "description": "All required verification checks are passed.",
+      "allowedActions": [
+        "generateImplementation",
+        "reviseDescription",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "generateImplementation", "to": "IMPLEMENTATION_GENERATED" },
+        { "on": "reviseDescription", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "IMPLEMENTATION_GENERATED",
+      "description": "Executable workflow/DSL/config is generated.",
+      "allowedActions": [
+        "startTesting",
+        "reviseDescription",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "startTesting", "to": "TESTING" },
+        { "on": "reviseDescription", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "TESTING",
+      "description": "Workflow is being tested in non-production.",
+      "allowedActions": [
+        "completeTestingSuccess",
+        "fixImplementationIssue",
+        "fixModelIssue",
+        "reviseDescription",
+        "deleteProject"
+      ],
+      "transitions": [
+        { "on": "completeTestingSuccess", "to": "READY_FOR_DEVELOPMENT" },
+        { "on": "fixImplementationIssue", "to": "IMPLEMENTATION_GENERATED" },
+        { "on": "fixModelIssue", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "READY_FOR_DEVELOPMENT",
+      "description": "Tests and approvals are complete; ready to deploy.",
+      "allowedActions": ["deploy", "reviseDescription", "deleteProject"],
+      "transitions": [
+        { "on": "deploy", "to": "DEPLOYED" },
+        { "on": "reviseDescription", "to": "MODEL_IN_PROGRESS" }
+      ]
+    },
+    {
+      "id": "DEPLOYED",
+      "description": "Workflow is live in production.",
+      "allowedActions": ["retire", "reviseDescription", "deleteProject"],
+      "transitions": [
+        { "on": "retire", "to": "RETIRED" }
+      ]
+    },
+    {
+      "id": "RETIRED",
+      "description": "Workflow is decommissioned and archived.",
+      "allowedActions": ["deleteProject"],
+      "transitions": []
+    }
+  ],
+  "globalActions": {
+    "reviseDescription": {
+      "description": "Revise natural-language description at any stage.",
+      "semanticsChangingTransition": "MODEL_IN_PROGRESS"
+    },
+    "deleteProject": {
+      "description": "Delete project from any state.",
+      "terminal": true
+    }
+  }
+}

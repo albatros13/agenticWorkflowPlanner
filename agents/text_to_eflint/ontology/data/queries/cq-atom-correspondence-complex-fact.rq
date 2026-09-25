@@ -1,0 +1,34 @@
+
+#########################################################################################################
+# Given a complex fact frame, what relations hold between the atom roles of it and its operands?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+prefix co: <http://purl.org/co/>
+
+SELECT ?topSlot ?treeSlot ?treeFact WHERE {
+    # A complex fact should be given as input.
+    VALUES ?topFact { ex:complexFact}
+    ?topFact a flint:ComplexFact .
+
+    # Check all operands of the given complex fact.
+    ?topFact flint:hasOperands/rdf:rest*/rdf:first ?treeFact .
+
+    # Search for all slotCorrespondences that map a slot (atom role) of the given complex fact.
+    ?slotCorrespondence a flint:SlotCorrespondence .
+    FILTER EXISTS {?slotCorrespondence co:element/flint:slotFromFrame ?topFact }
+
+    # Per slotcorresponence, get the slot of the given complex fact that is mapped.
+    ?slotCorrespondence co:element ?element .
+    FILTER EXISTS {?element flint:slotFromFrame ?topFact} 
+    ?element flint:slotLabel ?topSlot .
+
+    # Get the slots of the underlaying facts that are mapped.
+    ?slotCorrespondence co:element ?treeElement .
+    FILTER EXISTS {?treeElement flint:slotFromFrame ?treeFact} 
+    ?treeElement flint:slotLabel ?treeSlot .
+}

@@ -1,0 +1,21 @@
+
+#########################################################################################################
+# Given a "derived" concept based on one or more other concepts, 
+# which other concepts is it directly based on?
+##########################################################################################################
+
+# The ontology containing the interpretation
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?operand WHERE {
+    # A "derived" concept should be given as input . 
+    VALUES ?complexFact { ex:derivedConcept} 
+    ?complexFact a flint:ComplexFact . 
+
+    # Get all the concepts it is *directly* based on .
+    ?complexFact flint:hasOperands/rdf:rest*/rdf:first ?operand .
+}

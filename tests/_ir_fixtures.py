@@ -6,8 +6,8 @@ and AND/concurrent.
 """
 from __future__ import annotations
 
-from src.ir.enums import ElementType, GatewayKind
-from src.ir.models import Element, Process, Relation, Threshold
+from agents.text_to_bpmn.pipeline.ir.enums import ElementType, GatewayKind
+from agents.text_to_bpmn.pipeline.ir.models import Element, Process, Relation, Threshold
 
 
 def sequential() -> Process:

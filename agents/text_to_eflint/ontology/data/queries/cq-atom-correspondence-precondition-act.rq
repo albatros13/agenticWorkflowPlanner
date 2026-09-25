@@ -1,0 +1,42 @@
+
+#########################################################################################################
+# Given a fact frame used to describe a precondition for an act frame, 
+# what role would the atoms involved in the fact frame play in the act frame?
+
+# Note that for complex facts as a precondition the corresponding slots can be in an underlying fact. 
+# The "correspondingFact" that is returned is the exact fact that has a slot corresponding to the act and plays a role in the given precondition.
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+prefix co: <http://purl.org/co/>
+
+SELECT ?correspondingFact ?act ?actSlotLabel ?preconditionSlotLabel WHERE {
+    # A fact describing a precondition should be given as input.
+    VALUES ?precondition { ex:fact}
+    ?precondition a flint:Fact .
+
+    # An act should be given as input.
+    VALUES ?act {ex:act}
+    ?act a flint:Act .
+
+    # Check all operands of precondition.
+    ?precondition (flint:hasOperands/rdf:rest*/rdf:first)* ?correspondingFact .
+
+    # Search for all slotCorrespondences that correspond with a slot of the act.
+    ?slotCorrespondence a flint:SlotCorrespondence .
+    FILTER EXISTS {?slotCorrespondence co:element/flint:slotFromFrame ?act }
+
+    # Get the slot of the act that is in correspondence.
+    ?slotCorrespondence co:element ?element .
+    FILTER EXISTS {?element flint:slotFromFrame ?act} 
+    ?element flint:slotLabel ?actSlotLabel .
+
+    # Get the slot of the precondition that is in correspondence.
+    ?slotCorrespondence co:element ?preElement .
+    FILTER EXISTS {?preElement flint:slotFromFrame ?correspondingFact} 
+    ?preElement flint:slotLabel ?preconditionSlotLabel .
+}

@@ -1,0 +1,13 @@
+{
+  "$comment": "Agent registry manifest. Flip a sub-agent from in-process to a remote HTTP service by setting transport=http and base_url. See todo/COORDINATOR_PLAN.md sec 4.",
+  "agents": [
+    {
+      "name": "text_to_bpmn",
+      "description": "Guideline/NL text -> validated BPMN 2.0 (+DMN). Wraps the staged text_to_bpmn pipeline.",
+      "transport": "in_process",
+      "intents": ["engineer_process"],
+      "base_url": null,
+      "timeout_s": 300
+    }
+  ]
+}

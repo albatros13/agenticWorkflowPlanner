@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+
 # C extensions
 *.so
 
@@ -151,4 +152,10 @@ cython_debug/
 .idea/
 
 # Project specific
-runs/
+# Runtime storage — shared exchange + per-agent private I/O (see config/storage.json).
+# Data is gitignored; committed READMEs document each area.
+/storage/*
+!/storage/README.md
+agents/*/storage/*
+!agents/*/storage/README.md
+*.pdf

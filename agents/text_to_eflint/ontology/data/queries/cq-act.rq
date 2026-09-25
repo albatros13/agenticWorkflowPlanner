@@ -1,0 +1,22 @@
+
+#########################################################################################################
+# Given an interpretation, 
+# what kinds of acts might agents exercise?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+PREFIX co: <http://purl.org/co/> 
+
+
+SELECT ?interpretation ?act WHERE {
+    # The interpretation (as a frameset) should be given as input.
+    VALUES ?interpretation { ex:frameset }
+    ?interpretation a flint:FrameSet .
+    ?act a flint:Act . 
+
+    # All frames that are in the given interpretation.
+    ?interpretation co:element ?act .
+}

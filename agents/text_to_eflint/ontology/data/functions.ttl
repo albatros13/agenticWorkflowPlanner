@@ -1,0 +1,171 @@
+########################################
+
+#    Copyright 2022 Nederlandse Organisatie voor Toegepast Natuur-
+#     wetenschappelijk Onderzoek TNO / TNO, Netherlands Organisation for 
+#     applied scientific research
+
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+
+#        http://www.apache.org/licenses/LICENSE-2.0
+
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+########################################
+
+@prefix flint: <http://ontology.tno.nl/normengineering/flint#> .
+@prefix fno: <https://w3id.org/function/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Boolean functions (input and output are boolean)
+
+flint:conjunction
+  owl:sameAs flint:and ;
+  rdf:type fno:Function ;
+  fno:name "Conjunction" ;
+  skos:altLabel "And" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+flint:disjunction
+  owl:sameAs flint:or ;
+  rdf:type fno:Function ;
+  fno:name "Disjunction" ; 
+  skos:altLabel "Or" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+flint:negation
+  owl:sameAs flint:not ;
+  rdf:type fno:Function ;
+  fno:name "Negation" ;
+  skos:altLabel "Not" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+# Comparison functions (output is boolean)
+
+flint:equals
+  rdf:type fno:Function ;
+  fno:name "Equals" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+flint:greaterThan
+  rdf:type fno:Function ;
+  fno:name "Greater than" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+flint:lessThan
+  rdf:type fno:Function ;
+  fno:name "Less than" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+flint:greaterThanOrEqualTo
+  rdf:type fno:Function ;
+  fno:name "Greater than or equal to" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+flint:lessThanOrEqualTo
+  rdf:type fno:Function ;
+  fno:name "Less than or equal to" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:boolean ;
+  ] ) ;
+.
+
+
+# Arithmetic functions (input and output are numerical)
+
+flint:addition
+  owl:sameAs flint:plus ;
+  rdf:type fno:Function ;
+  fno:name "Addition" ;
+  skos:altLabel "Plus" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:decimal ;
+  ] ) ;
+.
+
+flint:subtraction
+  owl:sameAs flint:minus ;
+  rdf:type fno:Function ;
+  fno:name "Subtraction" ;
+  skos:altLabel "Minus" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:decimal ;
+  ] ) ;
+.
+
+flint:multiplication
+  owl:sameAs flint:times ;
+  rdf:type fno:Function ;
+  fno:name "Multiplication" ;
+  skos:altLabel "Times" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:decimal ;
+  ] ) ;
+.
+
+flint:division
+  rdf:type fno:Function ;
+  fno:name "Division" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:decimal ;
+  ] ) ;
+.
+
+flint:percentOf
+  rdf:type fno:Function ;
+  rdfs:comment "The first parameter is a literal expressing a percentage; the second parameter is a literal or a Fact indicating of what quantity a percentage is being measured." ;
+  fno:name "Percent of" ;
+  fno:returns ( [
+    rdf:type fno:Output ;
+    fno:type xsd:decimal ;
+  ] ) ;
+.
+
+# If-function (first operand is boolean, second and third are output value if true and false respectively)
+
+flint:implication
+  owl:sameAs flint:if ;
+  rdf:type fno:Function ;
+  fno:name "Implication" ;
+  skos:altLabel "If" ;
+.

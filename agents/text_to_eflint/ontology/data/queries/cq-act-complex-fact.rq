@@ -1,0 +1,36 @@
+
+#########################################################################################################
+# Given an act frame, 
+# what logical or arithmetical expressions about the circumstances must be evaluated 
+# in order to determine whether an instance of an act is valid? ("complex facts")
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+# The query returns a list of complex facts with their function and operands.
+# If ?isTopPrecondition is true, it means this is a top-level precondition referenced by an act,
+# and it might have further complex facts as its operands.
+# Simple facts added as a precondition will not be returned (only as "operands").
+SELECT ?act (IF(?preconditions = ?topPreconditions, true, false) AS ?isTopPrecondition)?preconditionsDescription ?preconditions ?function ?operands  WHERE {
+    # The act frame should be given as input.
+    VALUES ?act { ex:act}
+    ?act a flint:Act . 
+    
+    # Get all preconditions from the act.
+    ?act flint:hasPrecondition ?topPreconditions .
+
+    # The tree of all underlying preconditions.
+    ?topPreconditions (flint:hasOperands/rdf:rest*/rdf:first)* ?preconditions .
+
+    #For all complex facts in the tree return its function and operands.
+    ?preconditions flint:hasFunction ?function . 
+    ?preconditions flint:hasOperands/rdf:rest*/rdf:first ?operands .
+
+    # Provide the description of the precondition for context (if added).
+    OPTIONAL { ?preconditions rdfs:comment ?preconditionsDescription . }
+
+}

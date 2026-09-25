@@ -1,0 +1,21 @@
+
+#########################################################################################################
+# Given a function, 
+# what is the datatype of its application outcomes?
+##########################################################################################################
+
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+PREFIX fno: <https://w3id.org/function/ontology#> 
+
+
+SELECT ?function ?datatype WHERE {
+    # A function should be given as input
+    VALUES ?function { flint:function } 
+
+    # Get the datatype of the outcome
+    ?function fno:returns/rdf:rest*/rdf:first ?return .
+    ?return rdf:type fno:Output .
+    ?return fno:type ?datatype .
+}

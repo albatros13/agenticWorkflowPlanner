@@ -1,0 +1,17 @@
+{
+  "$comment": "Storage locations for the agent system. Each agent has a PRIVATE root for its own inputs/outputs; 'shared' is the cross-agent exchange area. 'kind' names the backend (only 'local' filesystem is implemented today) so a location can be swapped for a cloud store — e.g. kind='s3'/'gcs'/'postgres'/'qdrant' with matching params — later by editing this file, NOT agent code. For kind='local', 'path' is relative to the repo root (or absolute). Override this file's location via the STORAGE_CONFIG env var; override an individual local path via RUNS_DIR (text_to_bpmn) / PROJECTS_DIR (coordinator).",
+  "shared": {
+    "kind": "local",
+    "path": "storage"
+  },
+  "agents": {
+    "text_to_bpmn": {
+      "kind": "local",
+      "path": "agents/text_to_bpmn/storage"
+    },
+    "coordinator": {
+      "kind": "local",
+      "path": "agents/coordinator/storage"
+    }
+  }
+}

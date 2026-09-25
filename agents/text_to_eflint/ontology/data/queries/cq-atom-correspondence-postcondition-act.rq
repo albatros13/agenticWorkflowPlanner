@@ -1,0 +1,43 @@
+
+#########################################################################################################
+# Given a fact frame used to describe a postcondition for an act frame,
+# what role would the atoms involved in the fact frame play in the act frame?
+
+# Note that postconditions can only be simple facts.
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+prefix co: <http://purl.org/co/>
+
+SELECT  ?act ?postcondition ?slotAct ?slotPostcondition ?hasPostconditionValue WHERE {
+    # A fact describing a postcondition should be given as input.
+    VALUES ?postcondition { ex:fact}
+    ?postcondition a flint:Fact .
+
+    # An act should be given as input.
+    VALUES ?act {ex:act}
+    ?act a flint:Act .
+
+    # Get the postcondition value
+    ?actPost flint:hasPostconditionFrame ?postcondition .
+    ?actPost flint:hasPostconditionValue ?hasPostconditionValue .
+
+  
+    # Search for all slotCorrespondences that map a slot of the act.
+    ?slotCorrespondence a flint:SlotCorrespondence .
+    FILTER EXISTS {?slotCorrespondence co:element/flint:slotFromFrame ?act }
+
+    # Get the slot of the act that is mapped.
+    ?slotCorrespondence co:element ?element .
+    FILTER EXISTS {?element flint:slotFromFrame ?act} 
+    ?element flint:slotLabel ?slotAct .
+
+    # Get the slot of the postcondition that is mapped.
+    ?slotCorrespondence co:element ?postElement .
+    FILTER EXISTS {?postElement flint:slotFromFrame ?postcondition} 
+    ?postElement flint:slotLabel ?slotPostcondition .
+}

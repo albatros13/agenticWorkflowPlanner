@@ -1,0 +1,24 @@
+
+#########################################################################################################
+# Given an act frame, 
+# what must be the case about the circumstances in which an instance of the act takes place 
+# in order for that act to be valid?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+
+SELECT ?act ?preconditions ?description WHERE {
+    # The act frame should be given as input
+    VALUES ?act { ex:act }
+    ?act a flint:Act . 
+    
+    # Get all (top-level) preconditions from the act
+    ?act flint:hasPrecondition ?preconditions .
+    # Provide the description of the precondition for context as the precondition can be a complex fact
+    OPTIONAL { ?preconditions rdfs:comment ?description . }
+}

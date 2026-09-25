@@ -1,7 +1,8 @@
+import json
 import os
 from openai import OpenAI
 import logging
-from src.content_provider import get_full_paths, get_html_content, encode_image
+from agents.text_to_bpmn.pipeline.content_provider import get_full_paths, get_html_content, encode_image
 
 DEFAULT_OPENAI = os.getenv("OPENAI_MODEL", "gpt-5")
 
@@ -13,6 +14,42 @@ if not OPENAI_API_KEY:
     logger.warning("⚠️ OPENAI_API_KEY not set — OpenAI features will be unavailable")
 
 llm_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+
+def ask_openai_structured(*, task, system, prompt, schema, max_tokens=4096, model=DEFAULT_OPENAI):
+    """Force a function tool call so the model returns JSON conforming to ``schema``.
+
+    This is the actual LLM call behind the pipeline's ``OpenAIProvider``.
+
+    Returns ``(data: dict, raw_text: str, model: str)``. Raises ``RuntimeError`` when the
+    key is missing or the model returns no tool call; SDK/API errors propagate.
+    """
+    if not llm_client:
+        raise RuntimeError("OPENAI_API_KEY not set; cannot call OpenAI.")
+    fn_name = "emit_" + task
+    response = llm_client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        timeout=120,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": fn_name,
+                "description": f"Return the structured result for task '{task}'.",
+                "parameters": schema,
+            },
+        }],
+        tool_choice={"type": "function", "function": {"name": fn_name}},
+    )
+    message = response.choices[0].message
+    if not message.tool_calls:
+        raise RuntimeError("OpenAI response contained no tool call")
+    raw = message.tool_calls[0].function.arguments
+    return json.loads(raw), raw, model
 
 
 def ask_openai_text_llm(prompt, model=DEFAULT_OPENAI):

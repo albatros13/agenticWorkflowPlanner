@@ -1,0 +1,28 @@
+
+#########################################################################################################
+# What are aspects on which two states in this normative system can differ 
+# according to this source?
+##########################################################################################################
+
+# The ontology containing the interpretation
+PREFIX ex: <http://example.org/>
+# The ontology containing the source, if source is included in the interpretation, replace srcEx: by ex:
+PREFIX srcEx: <http://example.org/source>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?fact ?element WHERE {
+    # A source should be given as input
+    VALUES ?source { srcEx:article2 } 
+  
+    ?fact a flint:Fact . 
+
+    # Get all the elements of the given source
+    ?source  src:contains* ?element .
+  
+    # Get all facts that have one of the elements listed as its source
+    ?fact flint:hasSource ?element .
+
+}

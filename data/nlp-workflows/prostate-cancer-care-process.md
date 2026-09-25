@@ -169,6 +169,3 @@ Treatment selection takes into account:
 
 The document states that treatment options are ordered according to the priority given by oncological criteria in the supporting bibliography.
 
----
-
-> **Note:** The original document appears to be an older Spanish clinical pathway (it explicitly references the 2002 SAS Programme Contract), so the translation above is a faithful translation of the source rather than an indication that these diagnostic or treatme… *[source text ends mid-sentence]*

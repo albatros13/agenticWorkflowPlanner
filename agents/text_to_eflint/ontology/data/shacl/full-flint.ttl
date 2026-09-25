@@ -1,0 +1,80 @@
+@prefix : <http://ontology.tno.nl/normengineering/flint/shapes#> .
+@prefix flint: <http://ontology.tno.nl/normengineering/flint#> .
+@prefix fno: <https://w3id.org/function/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# If a FLINT knowledge graph fails on any of the constraints included here,
+# it is not a well-formed FLINT graph.
+:FactShape
+  rdf:type sh:NodeShape ;
+  rdfs:label "Fact Shape" ;
+  rdfs:comment "Specifies constraints on Facts" ;
+  sh:targetClass flint:Fact ;
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:prefixes flint: ;
+    sh:severity sh:Violation ;
+    sh:message "A Fact cannot operate on itself." ;
+    sh:select "SELECT * WHERE { $this (flint:hasOperands/rdf:rest*/rdf:first)+ $this }" 
+  ] ;
+.
+:ComplexFactShape
+  rdf:type sh:NodeShape ;
+  rdfs:label "ComplexFact Shape" ;
+  rdfs:comment "Specifies constraints on ComplexFacts" ;
+  sh:targetClass flint:ComplexFact ;
+  sh:property [
+    sh:path flint:hasFunction ;
+    sh:minCount 1;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "ComplexFacts have exactly one function."
+  ] ;
+  sh:property [
+    sh:path flint:hasOperands ;
+    sh:minCount 1;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "ComplexFacts have exactly one list of operands."
+  ] ;
+.
+:ActShape
+  rdf:type sh:NodeShape ;
+  rdfs:label "Act Shape" ;
+  rdfs:comment "Specifies constraints for Acts" ;
+  sh:targetClass flint:Act ;
+  sh:property [
+    sh:path flint:hasActor ;
+    sh:minCount 1;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "Acts have exactly one characterization for the actor."
+  ] ;
+  sh:property [
+    sh:path flint:hasRecipient ;
+    sh:minCount 1;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "Acts have exactly one characterization for the recipient."
+  ] ;
+  sh:property [
+    sh:path flint:hasAction ;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "Acts have at most one Action."
+  ] ;
+  sh:property [
+    sh:path flint:hasObject ;
+    sh:maxCount 1;
+    sh:severity sh:Violation ;
+    sh:message "Acts have at most one Object."
+  ] ;
+  sh:property [
+    sh:path flint:hasPostcondition ;
+    sh:minCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "Acts have a postcondition.";  
+  ]
+.

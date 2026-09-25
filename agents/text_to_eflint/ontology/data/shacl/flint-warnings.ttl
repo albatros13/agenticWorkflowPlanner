@@ -1,0 +1,44 @@
+@prefix : <http://ontology.tno.nl/normengineering/flint/shapes#> .
+@prefix co: <http://purl.org/co/> .
+@prefix flint: <http://ontology.tno.nl/normengineering/flint#> .
+@prefix fno: <https://w3id.org/function/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# If a knowledge graph fails on any of the constraints included here,
+# it could still be a well-formed FLINT graph,
+# but it is advisable to check the accuracy of the graph.
+
+:FunctionShape
+  rdf:type sh:NodeShape ;
+  sh:targetSubjectsOf flint:hasFunction ;
+  sh:property [ 
+    sh:path flint:hasFunction ;
+    sh:in ( 
+      flint:and
+      flint:or
+      flint:not
+      flint:plus
+      flint:minus
+      flint:equals
+      flint:greaterThan
+      flint:lessThan
+      flint:greaterThanOrEqualTo
+      flint:lessThanOrEqualTo
+      flint:if
+    );
+    sh:severity sh:Warning ;
+    sh:message "Non-standard function used."
+  ] ;
+.
+:SlotCorrespondenceShape
+  rdf:type sh:NodeShape ;
+  sh:targetClass flint:SlotCorrespondence ;
+  sh:property [ 
+    sh:path co:element ;
+    sh:minCount 2 ;
+    sh:severity sh:Warning ;
+    sh:message "The SlotCorrespondence involves fewer than two slots." ;
+  ] ;
+.

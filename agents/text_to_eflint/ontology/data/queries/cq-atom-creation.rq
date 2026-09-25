@@ -1,0 +1,23 @@
+
+#########################################################################################################
+# Given an act with a postcondition, 
+# which roles by the affected fact frame should be filled by 'newly created' atoms?
+
+# By 'newly created', we mean atoms that were not previously used by any frame in the relevant case history.
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX src: <http://ontology.tno.nl/normengineering/source#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+SELECT ?frame ?slot WHERE {
+    # An act should be given as input.
+    VALUES ?act { ex:act}
+    ?act a flint:Act .
+
+    # Get all the creating slots from the act.
+    ?frame flint:hasCreatingSlot ?slot .
+
+}

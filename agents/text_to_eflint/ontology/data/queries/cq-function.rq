@@ -1,0 +1,40 @@
+
+#########################################################################################################
+# Given a "derived" concept based on one or more other concepts, 
+# which other concepts is it directly based on?
+
+# And what function is used to combine these other concepts to come to the derived concept,
+# and what is the name and an informal description of this function?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+PREFIX fno: <https://w3id.org/function/ontology#> 
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#> 
+
+SELECT ?operand (MIN(?function) as ?functionIRI) ?functionLabel ?functionDescription  WHERE {
+    # A "derived" concept should be given as input. 
+    VALUES ?complexFact { ex:playersArePlayingGame} 
+    ?complexFact a flint:ComplexFact . 
+
+    # Get all the concepts it is *directly* based on.
+    ?complexFact flint:hasOperands/rdf:rest*/rdf:first ?operand .
+
+    # Get the function to combine the operand concepts.
+    ?complexFact flint:hasFunction ?function .
+
+    OPTIONAL {
+        #Get the name of this function.
+        ?function fno:name ?functionName .
+
+        #Get the informal description of this function.
+        ?function skos:altLabel ?informalName .
+    }
+    BIND(COALESCE(?functionName, ?informalName, "") AS ?functionLabel )
+
+    OPTIONAL { ?function rdfs:comment ?functionDescription . }
+
+# To handle owl:sameAs statements on functions, group results by other variables
+} GROUP BY ?operand ?functionLabel ?functionDescription

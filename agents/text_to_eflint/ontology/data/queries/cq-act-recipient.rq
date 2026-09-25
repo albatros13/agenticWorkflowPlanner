@@ -1,0 +1,46 @@
+
+#########################################################################################################
+# Given an act frame,
+# what must be the case about a recipient being affected by an instance of the act in order for that act to be valid?
+##########################################################################################################
+
+PREFIX ex: <http://example.org/>
+PREFIX flint: <http://ontology.tno.nl/normengineering/flint#>
+prefix co: <http://purl.org/co/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> 
+
+
+SELECT ?act ?recipient (MAX(?recipientDescription) as ?recipientDescription) ?topPreconditions (MAX(?preconditionsDescription) as ?preconditionDescription) WHERE {
+    # The act frame should be given as input.
+    VALUES ?act { ex:act }
+    ?act a flint:Act .
+
+    # If the act has specified a recipient, that fact should be returned as an recipient.
+    OPTIONAL{ 
+        ?act flint:hasRecipient ?recipient . 
+        # Provide the description or label of the recipient for context as the recipient can be a complex fact, the lengthiest description is returned.
+        OPTIONAL { ?recipient rdfs:comment|rdfs:label  ?recipientDescription . }
+    } 
+
+    #If the act has preconditions, that have a SlotCorrespondence with the recipient slot of the act in their tree, return the top precondition of that tree.
+    OPTIONAL{
+        ?slotCorrespondence a flint:SlotCorrespondence .
+
+        # Search for all slotCorrespondences that map the "recipient" slot of the act
+        ?slotCorrespondence co:element  [
+           flint:slotFromFrame ?act ;
+           flint:slotLabel "recipient" ;
+        ] .
+      
+        # Get all preconditions from the act
+        ?act flint:hasPrecondition ?topPreconditions .
+        # Provide the description or label of the precondition for context as the precondition can be a complex fact, the lengthiest description is returned.
+        OPTIONAL { ?topPreconditions rdfs:comment|rdfs:label ?preconditionsDescription . }
+        # Check all operands of the top precondition 
+        ?topPreconditions (flint:hasOperands/rdf:rest*/rdf:first)* ?preconditions .
+        # Check if the preconditions are included in the mapping to "actor".
+        ?slotCorrespondence co:element/flint:slotFromFrame ?preconditions .
+    }  
+}
+GROUP BY ?act ?recipient ?topPreconditions 
