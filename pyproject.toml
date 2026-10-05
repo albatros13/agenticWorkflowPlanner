@@ -1,8 +1,9 @@
 [project]
 name = "agentic-workflow-planner"
 version = "0.1.0"
-description = "Guideline-to-BPMN agent: converts natural-language process descriptions into auditable BPMN 2.0 models via a validated, staged pipeline."
+description = "Coordinator + specialized agents (text->BPMN, text->eFLINT, regulatory docs) behind one transport-agnostic contract."
 requires-python = ">=3.11"
+# Core, shared by every agent: the contract models + each agent's FastAPI demo/service.
 dependencies = [
     "fastapi>=0.141",
     "pydantic>=2.13",
@@ -10,14 +11,38 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Providers / stores are optional so the core package and its test-suite import
-# and run without them (the pipeline falls back to in-memory + mocked LLM).
+# ---------------------------------------------------------------------------
+# Capability bundles — provider/store groups, referenced by in-code install
+# hints (e.g. "pip install .[retrieval]"). Kept small and single-purpose so the
+# core package and its test-suite import and run without them.
+# ---------------------------------------------------------------------------
 llm = ["anthropic>=0.40", "openai>=1.50"]
-retrieval = ["qdrant-client>=1.9"]
-bpmn = ["lxml>=5.0", "xmlschema>=3.0", "spiffworkflow>=3.0"]  # used from Phase 5 on
+retrieval = ["qdrant-client>=1.9,<1.16"]  # stay within the Qdrant cloud server's compat window (1.15.x)
+ingestion = ["pypdf>=4.0"]                 # PDF document loader (markdown/txt need nothing extra)
+bpmn = ["lxml>=5.0", "xmlschema>=3.0", "spiffworkflow>=3.0"]  # BPMN compile/validate/simulate
 eflint = ["rdflib>=7.0", "pyshacl>=0.26"]  # text->eFLINT: vendored FLINT ontology + SHACL validation
-provenance = ["neo4j>=5.0"]
-dev = ["pytest>=8.0", "httpx>=0.27"]  # httpx powers the FastAPI TestClient
+provenance = ["neo4j>=5.0"]                # audit/provenance graph (future)
+
+# ---------------------------------------------------------------------------
+# Per-agent runtime dependency sets — these MIRROR agents/<agent>/pyproject.toml
+# (each agent project just installs this package with its own extra). Every agent
+# transitively imports agents.text_to_bpmn (shared ingestion/chunker + its package
+# __init__), so the downstream agents build on the `text_to_bpmn` extra.
+# ---------------------------------------------------------------------------
+text_to_bpmn = ["agentic-workflow-planner[bpmn,ingestion,llm,retrieval]"]
+text_to_eflint = ["agentic-workflow-planner[text_to_bpmn,eflint]"]
+coordinator = ["agentic-workflow-planner[text_to_bpmn,retrieval]", "httpx>=0.27"]
+regulatory_docs = ["agentic-workflow-planner[text_to_bpmn,llm,retrieval]", "python-multipart>=0.0.9"]
+
+# Everything for every agent — "collect requirements for all agents".
+all = ["agentic-workflow-planner[text_to_bpmn,text_to_eflint,coordinator,regulatory_docs]"]
+
+# Test tooling + the full agent stack the suite exercises.
+dev = ["pytest>=8.0", "httpx>=0.27", "agentic-workflow-planner[all]"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 # The agents/ tree holds all agent source, incl. the text->BPMN pipeline

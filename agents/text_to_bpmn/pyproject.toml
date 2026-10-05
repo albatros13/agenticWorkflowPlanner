@@ -1,0 +1,25 @@
+# Standalone project for the text->BPMN agent.
+#
+# Run it on its own:
+#     cd agents/text_to_bpmn
+#     uv sync                      # builds .venv with just this agent's deps
+#     uv run uvicorn agents.text_to_bpmn.demo.main:app --port 8080
+#
+# It installs the monorepo (editable) with only the `text_to_bpmn` extra, so the
+# shared contract + pipeline source is importable while heavy deps for the other
+# agents are left out. The dependency set is defined once in the root pyproject's
+# `text_to_bpmn` extra; this file just selects it.
+[project]
+name = "text-to-bpmn-agent"
+version = "0.1.0"
+description = "Converts natural-language process descriptions into auditable BPMN 2.0 via a validated, staged pipeline."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[text_to_bpmn]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+# This is an application (runner), not a library — don't try to build it as a wheel;
+# the importable source comes from the editable monorepo dependency above.
+package = false

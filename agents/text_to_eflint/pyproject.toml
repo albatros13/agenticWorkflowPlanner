@@ -1,0 +1,22 @@
+# Standalone project for the text->eFLINT agent.
+#
+# Run it on its own:
+#     cd agents/text_to_eflint
+#     uv sync                      # builds .venv with just this agent's deps
+#     uv run uvicorn agents.text_to_eflint.demo.main:app --port 8090
+#
+# Installs the monorepo (editable) with the `text_to_eflint` extra, which pulls the
+# shared text->BPMN ingestion it builds on plus the eFLINT stack (rdflib + pyshacl).
+# The dependency set is defined once in the root pyproject's `text_to_eflint` extra.
+[project]
+name = "text-to-eflint-agent"
+version = "0.1.0"
+description = "Turns natural-language normative text into FLINT models and validates them against the FLINT ontology + SHACL shapes."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[text_to_eflint]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+package = false

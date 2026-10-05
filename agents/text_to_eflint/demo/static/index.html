@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Text → eFLINT — legal text labelling demo</title>
+<style>
+  :root {
+    --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626;
+    /* role palette (text / background) */
+    --action:#b91c1c; --action-bg:#fee2e2;
+    --actor:#15803d; --actor-bg:#dcfce7;
+    --object:#1d4ed8; --object-bg:#dbeafe;
+    --recipient:#6d28d9; --recipient-bg:#ede9fe;
+    --other:#475569; --other-bg:#f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; color:#94a3b8; font-size:12px; }
+  .wrap { display:grid; grid-template-columns:380px 1fr; gap:16px; padding:16px; align-items:start; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  textarea { width:100%; height:280px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:10px; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  select { border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff; }
+  button { border:0; border-radius:8px; padding:9px 14px; font-weight:600; cursor:pointer; }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#eef2ff; color:var(--accent); }
+  label.file { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--muted); }
+  #right { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .badges { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .b-ok { background:#dcfce7; color:var(--ok); }
+  .b-info { background:#e0e7ff; color:#3730a3; }
+  .b-warn { background:#fef3c7; color:#92400e; }
+  .muted { color:var(--muted); }
+  .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; white-space:pre-wrap; }
+
+  /* legend */
+  .legend { display:flex; gap:8px; flex-wrap:wrap; }
+  .legend .key { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; cursor:pointer; user-select:none; border:1px solid transparent; }
+  .legend .key .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .legend .key.off { opacity:.4; }
+
+  /* labelled sentence */
+  .sent { padding:10px 0; border-bottom:1px solid var(--line); }
+  .sent:last-child { border-bottom:0; }
+  .sent .idx { color:var(--muted); font-size:11px; font-weight:700; margin-right:6px; }
+  .tokens { line-height:2.1; }
+  .tok { padding:1px 4px; border-radius:5px; }
+  .w-action    { background:var(--action-bg);    color:var(--action);    box-shadow:inset 0 -2px 0 var(--action); }
+  .w-actor     { background:var(--actor-bg);     color:var(--actor);     box-shadow:inset 0 -2px 0 var(--actor); }
+  .w-object    { background:var(--object-bg);    color:var(--object);    box-shadow:inset 0 -2px 0 var(--object); }
+  .w-recipient { background:var(--recipient-bg); color:var(--recipient); box-shadow:inset 0 -2px 0 var(--recipient); }
+  .w-other     { color:var(--other); }
+  /* dimmed roles (legend toggles) */
+  .tokens.hide-action    .w-action    { background:transparent; color:#94a3b8; box-shadow:none; }
+  .tokens.hide-actor     .w-actor     { background:transparent; color:#94a3b8; box-shadow:none; }
+  .tokens.hide-object    .w-object    { background:transparent; color:#94a3b8; box-shadow:none; }
+  .tokens.hide-recipient .w-recipient { background:transparent; color:#94a3b8; box-shadow:none; }
+
+  /* frame table */
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  td.role { white-space:nowrap; font-weight:600; }
+  .frame { margin-top:8px; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12.5px; }
+  .frame .lbl { display:inline-block; min-width:78px; color:var(--muted); font-weight:600; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:6px; font-weight:600; }
+  .p-action{background:var(--action-bg);color:var(--action)} .p-actor{background:var(--actor-bg);color:var(--actor)}
+  .p-object{background:var(--object-bg);color:var(--object)} .p-recipient{background:var(--recipient-bg);color:var(--recipient)}
+  .noact { color:var(--muted); font-style:italic; }
+
+  details summary { cursor:pointer; font-weight:600; color:var(--muted); }
+  pre.json { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,Consolas,monospace; max-height:360px; }
+  @media(max-width:900px){ .wrap{ grid-template-columns:1fr; } }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg);} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Legal text → eFLINT labelling</h1>
+  <p>Paste legislation or upload a text file, then Label. Each sentence is tagged with FLINT semantic roles and compiled into act frames.</p>
+</header>
+
+<div class="wrap">
+  <!-- INPUT -->
+  <div class="card">
+    <h2>Input</h2>
+    <textarea id="text" placeholder="Paste legal / normative text, or upload a .txt/.md file…"></textarea>
+    <div class="row">
+      <label for="lang" class="muted">Language</label>
+      <select id="lang">
+        <option value="en">English</option>
+        <option value="nl">Nederlands</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="file">📄 Upload file<input id="file" type="file" accept=".txt,.md,.markdown,.text" hidden /></label>
+      <button class="ghost" id="sample" type="button">Load sample</button>
+      <button class="primary" id="run" type="button">Label</button>
+    </div>
+    <div class="row muted" id="status"></div>
+
+    <h2 style="margin-top:16px">Legend</h2>
+    <div class="legend" id="legend"></div>
+    <p class="muted" style="font-size:11.5px;margin:8px 0 0">Click a role to dim it. Words in <b>subordinate clauses</b> and anything uncategorised are tagged <i>other</i>.</p>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="right">
+    <div class="card">
+      <div class="badges" id="badges"></div>
+      <div id="out" class="muted">Labelling will appear here after you click <b>Label</b>.</div>
+    </div>
+    <div id="framesCard"></div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const ROLES = [
+  { key:'action',    label:'Action',    desc:'main verb + auxiliaries/modals' },
+  { key:'actor',     label:'Actor',     desc:'volitional causer / agent' },
+  { key:'object',    label:'Object',    desc:'entity affected by the action' },
+  { key:'recipient', label:'Recipient', desc:'benefactor of the action' },
+  { key:'other',     label:'Other',     desc:'everything else / subordinate clauses' },
+];
+const hidden = new Set();  // roles dimmed via legend
+
+const SAMPLE = `The minister shall grant a residence permit to the applicant if the conditions are met.
+The urologist prescribes medical treatment to the patient.
+The family physician assesses the IPSS and refers the patient back to the urologist.
+The Council appoints the members and regulates the composition of the committees.`;
+
+$('#sample').onclick = () => { $('#text').value = SAMPLE; $('#lang').value = 'en'; };
+
+$('#file').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { $('#text').value = r.result; $('#status').textContent = `Loaded ${f.name}`; };
+  r.readAsText(f);
+};
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+function renderLegend() {
+  $('#legend').innerHTML = ROLES.map(r => `
+    <span class="key ${hidden.has(r.key)?'off':''}" data-role="${r.key}" title="${esc(r.desc)}">
+      <span class="sw" style="background:var(--${r.key})"></span>${r.label}
+    </span>`).join('');
+  document.querySelectorAll('.legend .key').forEach(el => {
+    el.onclick = () => {
+      const role = el.dataset.role;
+      if (hidden.has(role)) hidden.delete(role); else hidden.add(role);
+      renderLegend(); applyHidden();
+    };
+  });
+}
+function applyHidden() {
+  document.querySelectorAll('.tokens').forEach(t => {
+    ROLES.forEach(r => t.classList.toggle('hide-'+r.key, hidden.has(r.key) && r.key!=='other'));
+  });
+}
+renderLegend();
+
+async function run() {
+  const text = $('#text').value.trim();
+  if (!text) { $('#status').textContent = 'Please enter or upload some text.'; return; }
+  $('#run').disabled = true;
+  $('#status').innerHTML = '<span class="spinner"></span> Labelling sentences…';
+  $('#out').innerHTML = ''; $('#badges').innerHTML = ''; $('#framesCard').innerHTML = '';
+  try {
+    const res = await fetch('/api/label', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language: $('#lang').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    render(data);
+    $('#status').textContent = `Done · ${data.provider} · ${data.language.toUpperCase()}`;
+  } catch (err) {
+    $('#out').innerHTML = `<div class="err">Labelling failed:\n${esc(err.message)}</div>`;
+    $('#status').textContent = 'Failed.';
+  } finally {
+    $('#run').disabled = false;
+  }
+}
+$('#run').onclick = run;
+
+function tokensHtml(tokens) {
+  // Re-join tokens with spacing that reads naturally (no space before punctuation).
+  return tokens.map((t, i) => {
+    const noSpaceBefore = i === 0 || /^[.,;:!?)\]}'"%]/.test(t.word) || /[(\[{]$/.test(tokens[i-1].word);
+    const sp = noSpaceBefore ? '' : ' ';
+    return `${sp}<span class="tok w-${t.role}" title="${t.role}">${esc(t.word)}</span>`;
+  }).join('');
+}
+
+function frameHtml(f, hasAct) {
+  if (!hasAct) return `<div class="frame noact">No act (empty action) — not emitted as a FLINT act frame.</div>`;
+  const line = (lbl, val, cls) => `<div><span class="lbl">${lbl}</span>${val ? `<span class="pill ${cls}">${esc(val)}</span>` : '<span class="muted">—</span>'}</div>`;
+  return `<div class="frame">
+    <div><span class="lbl">act</span><b>${esc(f.act)}</b></div>
+    ${line('action', f.action, 'p-action')}
+    ${line('actor', f.actor, 'p-actor')}
+    ${line('object', f.object, 'p-object')}
+    ${line('recipient', f.recipient, 'p-recipient')}
+  </div>`;
+}
+
+function render(data) {
+  const c = data.counts;
+  $('#badges').innerHTML =
+    `<span class="badge b-ok">✓ ${c.sentences} sentence${c.sentences===1?'':'s'} labelled</span>` +
+    `<span class="badge b-info">${c.acts} act frame${c.acts===1?'':'s'}</span>` +
+    (data.truncated ? `<span class="badge b-warn">truncated to first ${c.sentences}</span>` : '');
+
+  $('#out').innerHTML = `<div>${data.sentences.map((s, i) => `
+    <div class="sent">
+      <div class="tokens"><span class="idx">${i+1}</span>${tokensHtml(s.tokens)}</div>
+      ${frameHtml(s.frame, s.has_act)}
+    </div>`).join('')}</div>`;
+  applyHidden();
+
+  $('#framesCard').innerHTML = `
+    <div class="card">
+      <h2>FLINT frames (JSON)</h2>
+      <p class="muted" style="margin-top:-4px">${c.acts} act${c.acts===1?'':'s'} · facts and duties are placeholders in this extraction stage.</p>
+      <details>
+        <summary>Show flint.json</summary>
+        <pre class="json">${esc(JSON.stringify(data.flint, null, 2))}</pre>
+      </details>
+    </div>`;
+}
+</script>
+</body>
+</html>

@@ -19,7 +19,7 @@ Each agent owns its full source under its own folder in `agents/`; only the tran
 contract is shared:
 
 - **`agents/text_to_bpmn/`** — the text→BPMN agent, self-contained. Its `pipeline/` subpackage is the guideline→BPMN compiler (staged, provider-agnostic); `agent.py`/`service.py` expose it via the contract.
-- **`agents/text_to_eflint/`** — the text→eFLINT agent (legal/normative text). Vendors the FLINT ontology + SHACL shapes (`flint/`) and an LLM-based semantic-role **labelling** module that turns legal sentences into FLINT act frames (ported from TNO's FlintFiller-SRL, provider-agnostic).
+- **`agents/text_to_eflint/`** — the text→eFLINT agent (legal/normative text). Vendors the FLINT ontology + SHACL shapes (`ontology/`) and an LLM-based semantic-role **labelling** module that turns legal sentences into FLINT act frames (ported from TNO's FlintFiller-SRL, provider-agnostic).
 - **`agents/coordinator/`** — the coordinator agent, self-contained (intent, state machine, projects, cache, chat UI).
 - **`agents/contract/`** — the shared contract + registry every agent implements.
 - **`api/`** — the single place that talks to the real provider SDKs (Anthropic, OpenAI, Qdrant); the provider-agnostic LLM layer delegates its network calls here.
@@ -113,6 +113,9 @@ agents/                         # Agent layer — one folder per agent, shared c
   text_to_eflint/               # ── TEXT→eFLINT AGENT (legal/normative text) ──
     flint/                      #   vendored FLINT ontology + SHACL shapes + SPARQL CQs + loader (package data)
     labelling/                  #   LLM semantic-role labelling → FLINT act frames (schema, few-shot, frames)
+    demo/                       #   demo FastAPI + static UI: colour-coded role labelling + legend
+      main.py                   #     uvicorn agents.text_to_eflint.demo.main:app  (POST /api/label)
+      static/index.html         #     per-role coloured tokens, legend, act-frame view
 
 api/                            # single source of truth for real provider SDK calls
   anthropic_client.py           #   Anthropic SDK: structured JSON, chat, tool-loop, vision
@@ -215,6 +218,14 @@ The coordinator now reaches the agent over the REST contract (`/agent/manifest`,
 uvicorn agents.text_to_bpmn.demo.main:app --port 8080   # open http://localhost:8080 — renders BPMN with bpmn-js
 ```
 
+**Text→eFLINT labelling demo** — paste/upload legal text and see each sentence tagged with FLINT semantic roles (colour-coded, with a legend) plus the derived act frames:
+
+```bash
+uvicorn agents.text_to_eflint.demo.main:app --port 8090   # open http://localhost:8090
+```
+
+Needs an LLM key (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`), since labelling is one structured LLM call per sentence. Language: English or Dutch.
+
 **Configuration knobs (env vars):**
 
 | Var | Default | Purpose |
@@ -233,7 +244,7 @@ uvicorn agents.text_to_bpmn.demo.main:app --port 8080   # open http://localhost:
 ### 7. Testing
 
 ```bash
-pytest -q      # 104 tests, fully offline (scripted LLM + heuristic classifier); no API keys required
+pytest -q      # 109 tests, fully offline (scripted LLM + heuristic classifier); no API keys required
 ```
 
 The whole suite runs without keys or network: real LLM calls are exercised by monkeypatching the
@@ -253,7 +264,7 @@ the OpenAI happy-path without `.[llm]`).
 - ✅ **BPMN 2.0 & DMN 1.3 Generation:** Verified against official OMG schemas.
 - ✅ **Source Anchoring:** Rejects any model element not backed by extracted evidence.
 - ✅ **Multi-Format Ingestion:** Markdown and PDF with section-aware chunking.
-- ✅ **Offline Verification:** Comprehensive test suite (104 tests) runs fully offline using scripted LLM mocks.
+- ✅ **Offline Verification:** Comprehensive test suite (109 tests) runs fully offline using scripted LLM mocks.
 - ✅ **DMN Logic:** Deterministic generation of FEEL rules from textual conditions.
 - ✅ **Centralized, Pluggable LLM Access:** One `api/` package for all provider SDK calls; thin provider adapters; config-driven `auto`/`anthropic`/`openai` selection with an injectable per-agent LLM interface.
 - ✅ **Text→eFLINT Agent (foundation):** Vendored FLINT ontology + SHACL validation, and provider-agnostic LLM labelling of legal text into FLINT act frames (semantic-role schema, EN/NL few-shot examples, roles→frame mapping).

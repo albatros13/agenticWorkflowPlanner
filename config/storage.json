@@ -12,6 +12,10 @@
     "coordinator": {
       "kind": "local",
       "path": "agents/coordinator/storage"
+    },
+    "regulatory_docs": {
+      "kind": "local",
+      "path": "agents/regulatory_docs/storage"
     }
   }
 }

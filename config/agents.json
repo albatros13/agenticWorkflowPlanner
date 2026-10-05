@@ -8,6 +8,14 @@
       "intents": ["engineer_process"],
       "base_url": null,
       "timeout_s": 300
+    },
+    {
+      "name": "regulatory_docs",
+      "description": "Upload/find regulatory documents and vectorize a selected one into Qdrant (profiles in config/vectorization.json).",
+      "transport": "in_process",
+      "intents": ["upload_document", "find_documents", "vectorize_document"],
+      "base_url": null,
+      "timeout_s": 300
     }
   ]
 }

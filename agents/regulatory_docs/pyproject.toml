@@ -1,0 +1,25 @@
+# Standalone project for the regulatory_docs agent.
+#
+# Run it on its own:
+#     cd agents/regulatory_docs
+#     uv sync                      # builds .venv with just this agent's deps
+#     uv run uvicorn agents.regulatory_docs.demo.main:app --port 8100
+#
+# Installs the monorepo (editable) with the `regulatory_docs` extra: the shared
+# document ingestion (via text->BPMN), OpenAI embeddings + qdrant-client for the
+# cloud vector store, and python-multipart for the demo's file-upload route.
+# Cloud Qdrant credentials (QDRANT_URL/QDRANT_API_KEY) and OPENAI_API_KEY are read
+# from the repo-root .env at runtime. The dependency set is defined once in the root
+# pyproject's `regulatory_docs` extra.
+[project]
+name = "regulatory-docs-agent"
+version = "0.1.0"
+description = "Upload/find regulatory documents and vectorize a selected one into a (cloud) Qdrant collection."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[regulatory_docs]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+package = false

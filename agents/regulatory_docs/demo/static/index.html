@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Regulatory docs — upload / find / vectorize</title>
+<style>
+  :root { --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; color:#94a3b8; font-size:12px; }
+  .wrap { display:grid; grid-template-columns:420px 1fr; gap:16px; padding:16px; align-items:start; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
+  .card h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  textarea { width:100%; height:180px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:10px; font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; }
+  input[type=text], select { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  button { border:0; border-radius:8px; padding:9px 14px; font-weight:600; cursor:pointer; }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#eef2ff; color:var(--accent); }
+  label.file { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--muted); }
+  .muted { color:var(--muted); }
+  .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; white-space:pre-wrap; margin-top:10px; }
+  .doc { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:8px; cursor:pointer; }
+  .doc.sel { border-color:var(--accent); box-shadow:0 0 0 2px #dbeafe; }
+  .doc .t { font-weight:600; }
+  .doc .m { color:var(--muted); font-size:12px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#dcfce7; color:var(--ok); margin-left:6px; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; overflow:auto; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Regulatory documents</h1>
+  <p>Upload or find a document, then vectorize a selected one into a Qdrant cluster. Vectorization options come from <code>config/vectorization.json</code>.</p>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="card">
+      <h2>Upload</h2>
+      <input type="text" id="title" placeholder="Title (optional)" />
+      <div class="row"><textarea id="text" placeholder="Paste regulatory text (markdown supported)…"></textarea></div>
+      <div class="row">
+        <button class="primary" id="btnUpload">Upload text</button>
+        <label class="file">Upload file<input type="file" id="fileInput" hidden /></label>
+        <span class="muted" id="fileName"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Find</h2>
+      <div class="row">
+        <input type="text" id="query" placeholder="Search title / source / text…" />
+        <button class="ghost" id="btnFind">Search</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Documents</h2>
+      <div id="docs"><p class="muted">No documents loaded yet — upload or search.</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Vectorize selected</h2>
+      <div class="row">
+        <select id="profile"></select>
+        <button class="primary" id="btnVec" disabled>Vectorize → Qdrant</button>
+      </div>
+      <p class="muted" id="selInfo">Select a document above.</p>
+    </div>
+
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selected = null;
+
+async function api(path, opts) {
+  const resp = await fetch(path, opts);
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || resp.statusText);
+  return data;
+}
+
+function showErr(e) { $("result").innerHTML = `<div class="err">${e.message || e}</div>`; }
+
+function renderProfiles(profiles) {
+  const sel = $("profile");
+  sel.innerHTML = "";
+  for (const p of profiles) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = `${p.name} — ${p.provider}/${p.model} (${p.dimension}d) → ${p.cluster}/${p.collection}`;
+    if (p.is_default) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function renderDocs(docs) {
+  const box = $("docs");
+  if (!docs.length) { box.innerHTML = '<p class="muted">No documents found.</p>'; return; }
+  box.innerHTML = "";
+  for (const d of docs) {
+    const el = document.createElement("div");
+    el.className = "doc" + (selected === d.doc_id ? " sel" : "");
+    el.innerHTML = `<div class="t">${d.title}${d.vectorized ? '<span class="badge">vectorized</span>' : ''}</div>
+      <div class="m">${d.doc_id} · ${d.kind} · ${d.n_blocks} blocks · ${d.n_chars} chars</div>
+      <div class="m">${(d.preview || "").slice(0, 160)}</div>`;
+    el.onclick = () => select(d);
+    box.appendChild(el);
+  }
+}
+
+function select(d) {
+  selected = d.doc_id;
+  $("btnVec").disabled = false;
+  $("selInfo").textContent = `Selected: ${d.title} (${d.doc_id})`;
+  document.querySelectorAll(".doc").forEach(e => e.classList.remove("sel"));
+  [...document.querySelectorAll(".doc")].find(e => e.querySelector(".m").textContent.startsWith(d.doc_id))?.classList.add("sel");
+}
+
+async function refresh(query) {
+  const data = await api("/api/documents?query=" + encodeURIComponent(query || ""));
+  renderProfiles(data.profiles || []);
+  renderDocs(data.documents || []);
+}
+
+$("btnUpload").onclick = async () => {
+  try {
+    const data = await api("/api/upload", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: $("text").value, title: $("title").value }),
+    });
+    $("result").innerHTML = "";
+    await refresh("");
+    select(data.document);
+  } catch (e) { showErr(e); }
+};
+
+$("fileInput").onchange = async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  $("fileName").textContent = f.name;
+  try {
+    const fd = new FormData(); fd.append("file", f);
+    const data = await api("/api/upload_file", { method: "POST", body: fd });
+    await refresh(""); select(data.document);
+  } catch (e) { showErr(e); }
+};
+
+$("btnFind").onclick = () => refresh($("query").value).catch(showErr);
+
+$("btnVec").onclick = async () => {
+  if (!selected) return;
+  $("btnVec").disabled = true;
+  try {
+    const data = await api("/api/vectorize", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_id: selected, profile: $("profile").value }),
+    });
+    $("result").innerHTML = `<div class="card"><h2>Vectorization result</h2><pre>${JSON.stringify(data.vectorization, null, 2)}</pre></div>`;
+    await refresh($("query").value);
+  } catch (e) { showErr(e); }
+  finally { $("btnVec").disabled = false; }
+};
+
+refresh("").catch(() => {});
+</script>
+</body>
+</html>

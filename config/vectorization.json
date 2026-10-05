@@ -1,0 +1,60 @@
+{
+  "$comment": "Vectorization profiles for the regulatory_docs agent. A profile defines how a SELECTED document is chunked, embedded, and stored in a Qdrant cluster. Pick one via payload.profile (defaults to 'default_profile' below). Secrets (QDRANT_URL/QDRANT_API_KEY, OPENAI_API_KEY) live in .env — never here. Swapping the embedding model or target collection is a config edit, not a code change. embedding.provider: 'openai' (real, needs the llm extra + key) or 'hash' (deterministic local, no deps/keys — for dev/tests only). qdrant.cluster: 'main'/'kg' connect to the cloud cluster using QDRANT_URL/QDRANT_API_KEY (and QDRANT_URL_KG/QDRANT_API_KEY_KG for 'kg') read from .env; 'memory' uses qdrant-client's in-process mode. Override the file location with the VECTORIZATION_CONFIG env var.",
+  "default_profile": "default",
+  "profiles": {
+    "default": {
+      "description": "OpenAI small embeddings into the main Qdrant cluster (cosine).",
+      "embedding": {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "dimension": 1536,
+        "batch_size": 64
+      },
+      "chunking": {
+        "max_chars": 1200
+      },
+      "qdrant": {
+        "cluster": "main",
+        "collection": "regulatory_documents",
+        "distance": "cosine",
+        "recreate_collection": false
+      }
+    },
+    "openai-large": {
+      "description": "Higher-fidelity OpenAI large embeddings (3072-d) into the main cluster.",
+      "embedding": {
+        "provider": "openai",
+        "model": "text-embedding-3-large",
+        "dimension": 3072,
+        "batch_size": 32
+      },
+      "chunking": {
+        "max_chars": 1200
+      },
+      "qdrant": {
+        "cluster": "main",
+        "collection": "regulatory_documents_large",
+        "distance": "cosine",
+        "recreate_collection": false
+      }
+    },
+    "offline": {
+      "description": "Deterministic local hash embedder into an in-process Qdrant — no keys/network. Dev/tests only; not semantically meaningful.",
+      "embedding": {
+        "provider": "hash",
+        "model": "local-hash",
+        "dimension": 256,
+        "batch_size": 128
+      },
+      "chunking": {
+        "max_chars": 1200
+      },
+      "qdrant": {
+        "cluster": "memory",
+        "collection": "regulatory_documents_dev",
+        "distance": "cosine",
+        "recreate_collection": true
+      }
+    }
+  }
+}

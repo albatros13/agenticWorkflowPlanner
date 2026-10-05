@@ -1,0 +1,24 @@
+# Standalone project for the coordinator agent.
+#
+# Run it on its own:
+#     cd agents/coordinator
+#     uv sync                      # builds .venv with just this agent's deps
+#     uv run uvicorn agents.coordinator.service:app --port 8000
+#
+# Installs the monorepo (editable) with the `coordinator` extra: the shared contract
+# + text->BPMN sub-agent it routes to in-process, httpx for talking to remote agents
+# over the HTTP contract, and qdrant-client for the semantic-cache seam. Flip a
+# sub-agent to `transport: http` in config/agents.json to run it out-of-process.
+# The dependency set is defined once in the root pyproject's `coordinator` extra.
+[project]
+name = "coordinator-agent"
+version = "0.1.0"
+description = "Recognizes user intent, manages project lifecycle, and routes to specialized sub-agents behind one contract."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[coordinator]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+package = false
