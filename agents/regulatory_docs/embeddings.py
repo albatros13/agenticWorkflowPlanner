@@ -18,6 +18,8 @@ import math
 import os
 from typing import Callable
 
+from agents.text_to_bpmn.pipeline.config import load_dotenv
+
 from .config import EmbeddingConfig
 
 Embedder = Callable[[list[str]], list[list[float]]]
@@ -65,6 +67,7 @@ def _openai_embedder(cfg: EmbeddingConfig) -> Embedder:
         raise RuntimeError(
             "OpenAI embeddings require the 'openai' package (`pip install .[llm]`)."
         ) from exc
+    load_dotenv()  # seed OPENAI_API_KEY from a local .env (as qdrant_store does for QDRANT_*)
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not set; cannot create OpenAI embeddings.")
