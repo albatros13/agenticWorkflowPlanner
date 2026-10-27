@@ -16,6 +16,10 @@
     "regulatory_docs": {
       "kind": "local",
       "path": "agents/regulatory_docs/storage"
+    },
+    "petri_net_generator": {
+      "kind": "local",
+      "path": "agents/petri_net_generator/storage"
     }
   }
 }

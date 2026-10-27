@@ -10,10 +10,12 @@ import os
 
 from agents.contract import AgentRegistry
 from agents.paths import AGENTS_CONFIG, PROJECT_STATES_CONFIG
+from agents.petri_net_generator.agent import PetriNetGeneratorHandler
 from agents.text_to_bpmn.agent import TextToBpmnHandler
 
 from .cache import build_cache
 from .coordinator import Coordinator
+from .handoff import ModelHandoff
 from .intent import HeuristicIntentClassifier, IntentClassifier, LLMIntentClassifier
 from .projects.json_store import JsonProjectStore
 from .projects.store import ProjectStore
@@ -38,7 +40,10 @@ def build_coordinator(
     store: ProjectStore | None = None,
     classifier: IntentClassifier | None = None,
 ) -> Coordinator:
-    handlers = {"text_to_bpmn": TextToBpmnHandler()}
+    handlers = {
+        "text_to_bpmn": TextToBpmnHandler(),
+        "petri_net_generator": PetriNetGeneratorHandler(),  # PM4Py loads lazily on first use
+    }
     registry = AgentRegistry.from_config(AGENTS_CONFIG, handlers=handlers)
     machine = StateMachine.from_config(PROJECT_STATES_CONFIG)
     cache = build_cache(os.getenv("SEMANTIC_CACHE", "noop"))
@@ -48,4 +53,5 @@ def build_coordinator(
         machine=machine,
         cache=cache,
         classifier=classifier or _default_classifier(),
+        handoff=ModelHandoff(),
     )

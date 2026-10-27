@@ -16,6 +16,14 @@
       "intents": ["upload_document", "find_documents", "vectorize_document"],
       "base_url": null,
       "timeout_s": 300
+    },
+    {
+      "name": "petri_net_generator",
+      "description": "BPMN 2.0 XML / text_to_bpmn IR / NL text -> ordinary workflow Petri net (PNML) with structural + soundness validation.",
+      "transport": "in_process",
+      "intents": ["generate_petri_net"],
+      "base_url": null,
+      "timeout_s": 120
     }
   ]
 }
