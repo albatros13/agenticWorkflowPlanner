@@ -1,0 +1,22 @@
+// Consent
+
+#require "Ontology.eflint".
+
+// Consent fact
+Fact consent Identified by data-subject * controller * purpose * data. 
+
+// Consent Act (GPDR Art. 6(1)(a) + Art. 7)
+Act give-consent
+    Actor data-subject
+    Recipient controller
+    Related to purpose, data
+    Creates consent()
+    Holds when !consent().
+
+// Wihtdraw consent (GDPR Art. 7(3))
+Act withdraw-consent
+    Actor data-subject
+    Recipient controller
+    Related to purpose, data
+    Terminates consent()
+    Holds when consent().

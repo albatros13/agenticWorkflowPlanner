@@ -1,6 +1,8 @@
 """text -> eFLINT agent.
 
-Turns natural-language normative text into FLINT models (Act/Fact frames) and validates
-them against the FLINT ontology + SHACL shapes. The ontology assets themselves are vendored
-under :mod:`agents.text_to_eflint.flint` (see that package's README for provenance/licensing).
+* :mod:`.labelling` — FLINT semantic-role labelling of legal sentences into act frames (FlintFiller-SRL);
+* :mod:`.generation` — LLM-assisted generation of executable eFLINT specifications (facts, duties,
+  acts, scenarios), checked, scenario-tested and repaired; see ``generation/reference/README.md``;
+* :mod:`.ontology` — the vendored FLINT ontology + SHACL shapes (see that package's README);
+* :mod:`.agent` / :mod:`.service` — the agent contract handler and its HTTP service.
 """

@@ -1,0 +1,20 @@
+# Standalone project for the Petri net generator agent.
+#
+#     cd agents/petri_net_generator
+#     uv sync
+#     uv run uvicorn agents.petri_net_generator.service:app --port 8200
+#
+# The dependency set is defined once in the root pyproject's `petri_net_generator` extra.
+# Note: PM4Py (pulled in by that extra) is licensed AGPL-3.0.
+[project]
+name = "petri-net-generator-agent"
+version = "0.1.0"
+description = "Generates ordinary workflow Petri nets (PNML) from BPMN 2.0 XML, IR, or process text."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[petri_net_generator]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+package = false

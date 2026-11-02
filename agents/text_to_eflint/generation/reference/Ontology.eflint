@@ -1,0 +1,18 @@
+// Ontology
+
+// Controllers - The three VFL parties
+Fact controller Identified by String.
+Fact primary-controller Identified by String
+    Holds when controller(primary-controller).
+
+// Data subject
+Fact data-subject Identified by String.
+
+// Data - energy readings
+Fact data Identified by String.
+
+// Purpose - the VFL training purpose
+Fact purpose Identified by String.
+
+// VFL domain
+Fact training-round Identified by Int.

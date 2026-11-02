@@ -24,6 +24,14 @@
       "intents": ["generate_petri_net"],
       "base_url": null,
       "timeout_s": 120
+    },
+    {
+      "name": "text_to_eflint",
+      "description": "Regulatory text -> executable eFLINT specification (facts, duties, acts, scenarios), LLM-drafted then parsed, type-checked, grounded and scenario-tested with a repair loop.",
+      "transport": "in_process",
+      "intents": ["generate_eflint", "validate_eflint"],
+      "base_url": null,
+      "timeout_s": 600
     }
   ]
 }

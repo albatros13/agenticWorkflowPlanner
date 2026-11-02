@@ -1,4 +1,4 @@
-"""Demo API: legal text -> FLINT semantic-role labelling (SRL) + act frames.
+"""Demo API: legal text -> FLINT semantic-role labelling (SRL) + act frames, and eFLINT generation.
 
 POST /api/label splits the submitted text into sentences, runs each through the
 provider-agnostic :class:`FlintFrameLabeller`, and returns, per sentence, the words
@@ -7,6 +7,9 @@ act frame. The static frontend at ``/`` renders the labelling with per-role colo
 
 Mirrors the text->BPMN demo (``agents/text_to_bpmn/demo``): it selects a real LLM
 provider via the shared ``api``-backed layer and surfaces failures to the UI.
+
+POST /api/generate runs the agent's ``generate_eflint`` intent (LLM draft -> check -> repair) and
+returns the specification, findings, scenario results and rendered ``.eflint`` files.
 """
 from __future__ import annotations
 
@@ -22,6 +25,8 @@ from pydantic import BaseModel, Field
 from agents.text_to_bpmn.pipeline.config import Settings
 from agents.text_to_bpmn.pipeline.llm.base import LLMError, LLMProvider
 from agents.text_to_bpmn.shaping import select_provider
+from agents.contract import AgentRequest
+from agents.text_to_eflint.agent import GENERATE_EFLINT, TextToEflintHandler
 from agents.text_to_eflint.labelling import FlintFrameLabeller, role_dict_to_act_frame
 from agents.text_to_eflint.labelling.schema import ROLE_KEYS
 
@@ -132,6 +137,30 @@ def label(req: LabelRequest) -> dict:
         },
         "truncated": truncated,
     }
+
+
+class GenerateRequest(BaseModel):
+    text: str = Field(min_length=1)
+    domain_context: str = ""
+    title: str = ""
+    srl_hints: bool = False
+    language: str = "en"
+    max_repair_rounds: int = Field(default=2, ge=0, le=5)
+
+
+@app.post("/api/generate")
+def generate(req: GenerateRequest) -> dict:
+    settings = Settings.from_env()
+    try:
+        provider = _select_provider(settings)
+    except LLMError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    result = TextToEflintHandler(provider=provider).handle(
+        AgentRequest(intent=GENERATE_EFLINT, payload=req.model_dump())
+    )
+    if not result.ok:
+        raise HTTPException(status_code=422, detail=result.error)
+    return result.output
 
 
 @app.get("/api/health")

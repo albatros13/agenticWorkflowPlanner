@@ -1,0 +1,112 @@
+// Participation
+
+#require "Consent.eflint".
+
+// Facts
+
+// GDPR Art. 5(1)(a) - Lawfulness, fairness, transperency
+Fact personal-data-processed-lawfully Identified by controller.
+
+// GDPR Art. 5(1)(b) - Purpose Limitation
+Fact purpose-limitation Identified by controller * purpose.
+
+// GDPR Art. 5(1)(c) - Data minimisation
+Fact privacy-technique-applied Identified by controller * training-round * purpose * data.
+
+// GDPR Art. 26 - Joint controller arrangement
+Fact joint-controller-arrangement Identified by controller * purpose.
+
+// Data Act Art. 5 - Consumer authorized third-party access
+Fact consumer-authorized-third-party Identified by data-subject * controller * purpose.
+
+// Data Act Art. 8 - FRAND data sharing terms
+Fact data-sharing-terms-frand Identified by controller * purpose.
+
+// Electricity Directive Art. 23 - Access controls verified
+Fact access-controls-verified Identified by controller * purpose.
+
+// Electricity Directive Art. 24 - Third-party access procedure non-discriminatory
+Fact third-party-access-non-discriminatory Identified by controller * purpose.
+
+// Intermediate state facts
+Fact personal-data-collection Identified by controller * training-round * data-subject * purpose * data.
+Fact participation-request-pending Identified by controller * training-round * purpose.
+Fact compliance-conditions-verified Identified by controller * training-round * purpose.
+Fact training-round-authorized Identified by controller * training-round * purpose.
+
+// Duties
+
+// Duty - Apply privacy techniques (GDPR Art. 5(1)(c))
+Duty apply-privacy-techniques
+    Holder controller
+    Claimant data-subject
+    Related to training-round, purpose, data
+    Violated when personal-data-collection(controller, training-round, data-subject, purpose,data)
+        && !privacy-technique-applied(controller, training-round, purpose, data).
+
+// Acts
+
+// Step 1 - Collect personal data (GDPR Art. 5 + Art. 6)
+Act collect-personal-data
+    Actor controller
+    Recipient data-subject
+    Related to purpose, training-round, data
+    Holds when consent(data-subject, controller, purpose, data)
+        && personal-data-processed-lawfully(controller)
+        && purpose-limitation(controller, purpose)
+    Creates personal-data-collection(controller, training-round, data-subject, purpose, data)
+    Creates apply-privacy-techniques(controller, data-subject, training-round, purpose, data).
+
+// Step 2 - Fulfil privacy techniques duty (GDPR Art. 5(1)(c))
+Act fulfil-privacy-techniques
+    Actor controller
+    Recipient data-subject
+    Related to training-round, purpose, data
+    Holds when apply-privacy-techniques(controller, data-subject, training-round, purpose, data)
+        && personal-data-collection(controller, training-round, data-subject, purpose, data)
+    Creates privacy-technique-applied(controller, training-round, purpose, data)
+    Terminates apply-privacy-techniques(controller, data-subject, training-round, purpose, data).
+
+// Step 3 - Submit participation request (GDPR Art. 26, Data Act Art. 5 + Art. 8)
+Act submit-participation-request
+    Actor controller
+    Recipient primary-controller
+    Related to training-round, purpose, data, data-subject
+    Holds when joint-controller-arrangement(controller, purpose)
+        && personal-data-collection(controller, training-round, data-subject, purpose, data)
+        && data-sharing-terms-frand(controller, purpose)
+        && (consumer-authorized-third-party(data-subject, controller, purpose)
+            || primary-controller(controller))
+    Creates participation-request-pending(controller, training-round, purpose).
+
+// Step 4 - Verify compliance conditions (GDPR Art. 5(1)(c), Electricity Directive Art. 23)
+Act verify-compliance-conditions
+    Actor primary-controller
+    Recipient controller
+    Related to training-round, purpose, data
+    Holds when participation-request-pending(controller, training-round, purpose)
+        && privacy-technique-applied(controller, training-round, purpose, data)
+        && purpose-limitation(controller, purpose)
+        && access-controls-verified(controller, purpose)
+    Creates compliance-conditions-verified(controller, training-round, purpose)
+    Terminates participation-request-pending(controller, training-round, purpose).
+
+// Step 5 - Authorize training round (GDPR Art. 26, Electricity Directive Art. 24)
+Act authorize-training-round
+    Actor primary-controller
+    Recipient controller
+    Related to training-round, purpose
+    Holds when compliance-conditions-verified(controller, training-round, purpose)
+        && joint-controller-arrangement(controller, purpose)
+        && purpose-limitation(controller, purpose)
+        && third-party-access-non-discriminatory(controller, purpose)
+    Creates training-round-authorized(controller, training-round, purpose).
+
+// Step 6 - Expire training round
+Act expire-training-round
+    Actor primary-controller
+    Recipient controller
+    Related to training-round, purpose
+    Holds when training-round-authorized(controller, training-round, purpose)
+    Terminates training-round-authorized(controller, training-round, purpose).
+    

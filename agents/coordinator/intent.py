@@ -12,6 +12,7 @@ The LLM decides *classification*; the coordinator decides *control flow*.
 from __future__ import annotations
 
 import abc
+import re
 
 from pydantic import BaseModel, Field
 
@@ -25,12 +26,36 @@ PROJECT_STATUS = "project_status"
 REVISE_DESCRIPTION = "revise_description"
 DELETE_PROJECT = "delete_project"
 VERIFY_MODEL = "verify_model"
+GENERATE_PETRI_NET = "generate_petri_net"
 UNKNOWN = "unknown"
 
 INTENTS = [
     NEW_PROJECT, ENGINEER_PROCESS, OPEN_PROJECT, LIST_PROJECTS, FIND_PROJECT,
-    PROJECT_STATUS, REVISE_DESCRIPTION, DELETE_PROJECT, VERIFY_MODEL, UNKNOWN,
+    PROJECT_STATUS, REVISE_DESCRIPTION, DELETE_PROJECT, VERIFY_MODEL, GENERATE_PETRI_NET, UNKNOWN,
 ]
+
+# A BPMN 2.0 document pasted into a chat message (optionally with an XML declaration).
+_BPMN_XML = re.compile(
+    r"(?:<\?xml[^>]*\?>\s*)?<(?P<p>[\w.-]+:)?definitions\b.*?</(?P=p)?definitions\s*>", re.DOTALL)
+PETRI_NET_WORDS = ("petri", "pnml", "workflow net", "woped", "place/transition")
+
+
+def extract_bpmn_xml(text: str) -> tuple[str, str | None]:
+    """Split a message into ``(prose, bpmn_xml)``. Done in code, not by the classifier, so an
+    attached model is forwarded verbatim and never echoed through an LLM."""
+    m = _BPMN_XML.search(text)
+    if not m:
+        return text, None
+    return (text[:m.start()] + text[m.end():]).strip(), m.group(0)
+
+
+def _description_in_command(text: str) -> str:
+    """The process description carried by a command message, if any: the part after a colon
+    ("Make a Petri net for: ..."), or the whole message when it is long enough to be one."""
+    _, sep, tail = text.partition(":")
+    if sep and len(tail.split()) >= 3:
+        return tail.strip()
+    return text.strip() if len(text.split()) >= 15 else ""
 
 
 class IntentResult(BaseModel):
@@ -54,6 +79,13 @@ class HeuristicIntentClassifier(IntentClassifier):
         def hit(*words: str) -> bool:
             return any(w in t for w in words)
 
+        # First: Petri net requests often embed a process description that would otherwise trip
+        # the keyword rules below ("list", "status", "process", ...).
+        if hit(*PETRI_NET_WORDS):
+            description = _description_in_command(text)
+            return IntentResult(intent=GENERATE_PETRI_NET,
+                                slots={"process_description": description} if description else {},
+                                confidence=0.8)
         if hit("list", "show my projects", "my projects", "all projects"):
             return IntentResult(intent=LIST_PROJECTS, confidence=0.8)
         if hit("delete", "remove project", "discard project"):
@@ -97,7 +129,12 @@ _SCHEMA = {
 
 _SYSTEM = (
     "You are the intent router for an agentic workflow planner. Classify the user's message into "
-    "exactly one intent and extract any relevant slots. Do not answer the request; only classify."
+    "exactly one intent and extract any relevant slots. Do not answer the request; only classify.\n"
+    "- engineer_process: model a described process as BPMN.\n"
+    "- generate_petri_net: translate a process description, an attached BPMN model, or the current "
+    "project's model into a Petri net / workflow net / PNML. Put only the process description "
+    "itself (if the message contains one) in process_description, without the instruction.\n"
+    "- verify_model: verify/check the current model."
 )
 
 

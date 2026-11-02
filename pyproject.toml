@@ -55,6 +55,8 @@ include = ["agents*"]
 # Ship the vendored FLINT ontology data (ttl/rq) + its license notices inside the wheel so
 # importlib.resources can read them when installed. See agents/text_to_eflint/flint/README.md.
 "agents.text_to_eflint.flint" = ["data/**/*.ttl", "data/**/*.rq", "data/**/LICENSE", "VERSION", "LICENSE"]
+# Vendored reference eFLINT specification (MIT) used as few-shot example + golden tests.
+"agents.text_to_eflint.generation" = ["reference/*.eflint", "reference/scenarios/*.eflint", "reference/LICENSE", "reference/README.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

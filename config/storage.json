@@ -20,6 +20,10 @@
     "petri_net_generator": {
       "kind": "local",
       "path": "agents/petri_net_generator/storage"
+    },
+    "text_to_eflint": {
+      "kind": "local",
+      "path": "agents/text_to_eflint/storage"
     }
   }
 }

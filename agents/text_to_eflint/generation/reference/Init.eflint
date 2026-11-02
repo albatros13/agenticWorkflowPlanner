@@ -1,0 +1,62 @@
+// Init
+
+#require "Participation.eflint".
+
+// Domain Instances
+
++controller("company-a").
++controller("company-b").
++controller("company-c").
+
++primary-controller("company-a").
+
++data-subject("data-subject").
+
++data("energy-consumption-data").
++data("housing-characteristics-data").
++data("climate-data").
+
++purpose("building-energy-consumption-prediction").
++training-round(1).
+
+// Initial State
+
+// Consent - GDPR Art. 6(1)(a) + Art. 7
++consent("data-subject", "company-a", "building-energy-consumption-prediction", "energy-consumption-data").
++consent("data-subject", "company-b", "building-energy-consumption-prediction", "housing-characteristics-data").
++consent("data-subject", "company-c", "building-energy-consumption-prediction", "climate-data").
+
+// Lawfulness - GDPR Art. 5(1)(a)
++personal-data-processed-lawfully("company-a").
++personal-data-processed-lawfully("company-b").
++personal-data-processed-lawfully("company-c").
+
+// Purpose limitation - GDPR Art. 5(1)(b)
++purpose-limitation("company-a", "building-energy-consumption-prediction").
++purpose-limitation("company-b", "building-energy-consumption-prediction").
++purpose-limitation("company-c", "building-energy-consumption-prediction").
+
+// Joint controller arrangement - GDPR Art. 26
++joint-controller-arrangement("company-a", "building-energy-consumption-prediction").
++joint-controller-arrangement("company-b", "building-energy-consumption-prediction").
++joint-controller-arrangement("company-c", "building-energy-consumption-prediction").
+
+// Consumer Authorized third-party access - Data Act Art. 5
+// Only company B and company C are third parties, company A is the primary controller
++consumer-authorized-third-party("data-subject", "company-b", "building-energy-consumption-prediction").
++consumer-authorized-third-party("data-subject", "company-c", "building-energy-consumption-prediction").
+
+// FRAND data sharing terms - Data Act Art. 8
++data-sharing-terms-frand("company-a", "building-energy-consumption-prediction").
++data-sharing-terms-frand("company-b", "building-energy-consumption-prediction").
++data-sharing-terms-frand("company-c", "building-energy-consumption-prediction").
+
+// Access controls verified - Electricity Directive Art. 23
++access-controls-verified("company-a", "building-energy-consumption-prediction").
++access-controls-verified("company-b", "building-energy-consumption-prediction").
++access-controls-verified("company-c", "building-energy-consumption-prediction").
+
+// Third-party access non-discriminatory - Electricity Directive Art. 24
++third-party-access-non-discriminatory("company-a", "building-energy-consumption-prediction").
++third-party-access-non-discriminatory("company-b", "building-energy-consumption-prediction").
++third-party-access-non-discriminatory("company-c", "building-energy-consumption-prediction").

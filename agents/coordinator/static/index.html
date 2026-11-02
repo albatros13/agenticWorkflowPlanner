@@ -271,6 +271,7 @@ function handleResponse(data) {
   // Rendered model, if the text→BPMN agent produced one.
   const out = data.agent_result && data.agent_result.output;
   if (out && out.bpmn_xml) renderDiagram(bubble, out);
+  if (out && out.pnml) renderPetriNet(bubble, out);
 
   loadProjects();
 }
@@ -311,6 +312,28 @@ async function renderDiagram(bubble, out) {
     const blob = new Blob([out.bpmn_xml], { type:'application/xml' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = (activeProjectName || 'process') + '.bpmn'; a.click();
+  };
+}
+
+// ---- Petri net (PNML) -----------------------------------------------------
+function renderPetriNet(bubble, out) {
+  const v = out.validation || {}, n = out.net_summary || {};
+  const badge = (ok, label) => `<span class="badge ${ok ? 'b-ok':'b-bad'}">${ok?'✓':'✕'} ${label}</span>`;
+  const sound = v.soundness === 'not_checked'
+    ? '<span class="badge b-info">soundness not checked</span>' : badge(v.soundness === 'passed', 'Sound');
+  const wrap = document.createElement('div');
+  wrap.className = 'diagram-wrap';
+  wrap.innerHTML = `
+    <div class="bar">
+      <div class="badges">${badge(v.workflow_net, 'Workflow net')}${sound}
+        <span class="badge b-info">${n.places} places · ${n.transitions} transitions · ${n.arcs} arcs</span></div>
+      <div><button data-dl>Download .pnml</button></div>
+    </div>`;
+  bubble.appendChild(wrap);
+  wrap.querySelector('[data-dl]').onclick = () => {
+    const blob = new Blob([out.pnml], { type:'application/xml' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = (out.process_name || activeProjectName || 'process') + '.pnml'; a.click();
   };
 }
 

@@ -1,0 +1,124 @@
+// Scenario 5 - Second training round
+
+#require "Init.eflint"
+
+// Step 1 - Collect personal data (GDPR Art. 5 + Art. 6)
+
+collect-personal-data("company-a", "data-subject", "building-energy-consumption-prediction", 1, "energy-consumption-data").
+collect-personal-data("company-b", "data-subject", "building-energy-consumption-prediction", 1, "housing-characteristics-data").
+collect-personal-data("company-c", "data-subject", "building-energy-consumption-prediction", 1, "climate-data").
+
+// Verify personal-data-collection holds for all three companies
+?Holds(personal-data-collection("company-a", 1, "data-subject", "building-energy-consumption-prediction", "energy-consumption-data")).
+?Holds(personal-data-collection("company-b", 1, "data-subject", "building-energy-consumption-prediction", "housing-characteristics-data")).
+?Holds(personal-data-collection("company-c", 1, "data-subject", "building-energy-consumption-prediction", "climate-data")).
+
+// Step 2 - Fulfil privacy techniques duty (GDPR Art. 5(1)(c))
+
+fulfil-privacy-techniques("company-a", "data-subject", 1, "building-energy-consumption-prediction", "energy-consumption-data").
+fulfil-privacy-techniques("company-b", "data-subject", 1, "building-energy-consumption-prediction", "housing-characteristics-data").
+fulfil-privacy-techniques("company-c", "data-subject", 1, "building-energy-consumption-prediction", "climate-data").
+
+// Verify duty is terminated and privacy-technique-applied holds
+?Holds(privacy-technique-applied("company-a", 1, "building-energy-consumption-prediction", "energy-consumption-data")). 
+?Holds(privacy-technique-applied("company-b", 1, "building-energy-consumption-prediction", "housing-characteristics-data")). 
+?Holds(privacy-technique-applied("company-c", 1, "building-energy-consumption-prediction", "climate-data")).
+
+// Step 3 - Submit participation request (GDPR Art. 26, Data Act Art. 5)
+
+submit-participation-request("company-a", "company-a", 1, "building-energy-consumption-prediction", "energy-consumption-data", "data-subject").
+submit-participation-request("company-b", "company-a", 1, "building-energy-consumption-prediction", "housing-characteristics-data", "data-subject").
+submit-participation-request("company-c", "company-a", 1, "building-energy-consumption-prediction", "climate-data", "data-subject").
+
+?Holds(participation-request-pending("company-a", 1, "building-energy-consumption-prediction")).
+?Holds(participation-request-pending("company-b", 1, "building-energy-consumption-prediction")).
+?Holds(participation-request-pending("company-c", 1, "building-energy-consumption-prediction")).
+
+// Step 4 - Verify compliance conditions (GDPR Art. 5(1)(c), Electricity Directive Art. 23)
+
+verify-compliance-conditions("company-a", "company-a", 1, "building-energy-consumption-prediction", "energy-consumption-data").
+verify-compliance-conditions("company-a", "company-b", 1, "building-energy-consumption-prediction", "housing-characteristics-data").
+verify-compliance-conditions("company-a", "company-c", 1, "building-energy-consumption-prediction", "climate-data").
+
+// Verify-compliance-conditions-verified 
+?Holds(compliance-conditions-verified("company-a", 1, "building-energy-consumption-prediction")).
+?Holds(compliance-conditions-verified("company-b", 1, "building-energy-consumption-prediction")).
+?Holds(compliance-conditions-verified("company-c", 1, "building-energy-consumption-prediction")).
+
+// Step 5 - Authorize training round (GDPR Art. 26, Data Act Art. 8, Electricity Directive Art. 24)
+
+authorize-training-round("company-a", "company-a", 1, "building-energy-consumption-prediction").
+authorize-training-round("company-a", "company-b", 1, "building-energy-consumption-prediction").
+authorize-training-round("company-a", "company-c", 1, "building-energy-consumption-prediction").
+
+// Verify training round is authorized for all parties
+?Holds(training-round-authorized("company-a", 1, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-b", 1, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-c", 1, "building-energy-consumption-prediction")).
+
+// Step 6 - Expire training round
+
+expire-training-round("company-a", "company-a", 1, "building-energy-consumption-prediction").
+expire-training-round("company-a", "company-b", 1, "building-energy-consumption-prediction").
+expire-training-round("company-a", "company-c", 1, "building-energy-consumption-prediction").
+
+// Verify training round authorization is terminated
+?Holds(training-round-authorized("company-a", 1, "building-energy-consumption-prediction")). // False
+?Holds(training-round-authorized("company-b", 1, "building-energy-consumption-prediction")). // False
+?Holds(training-round-authorized("company-c", 1, "building-energy-consumption-prediction")). // False
+
+// Training round 2
++training-round(2).
+
+// Step 1 - Collect personal data for round 2
+collect-personal-data("company-a", "data-subject", "building-energy-consumption-prediction", 2, "energy-consumption-data").
+collect-personal-data("company-b", "data-subject", "building-energy-consumption-prediction", 2, "housing-characteristics-data").
+collect-personal-data("company-c", "data-subject", "building-energy-consumption-prediction", 2, "climate-data").
+
+// Verify personal-data-collection holds for round 2
+?Holds(personal-data-collection("company-a", 2, "data-subject", "building-energy-consumption-prediction", "energy-consumption-data")).
+?Holds(personal-data-collection("company-b", 2, "data-subject", "building-energy-consumption-prediction", "housing-characteristics-data")).
+?Holds(personal-data-collection("company-c", 2, "data-subject", "building-energy-consumption-prediction", "climate-data")).
+
+// Step 2 - Fulfil privacy techniques duty for round 2
+
+fulfil-privacy-techniques("company-a", "data-subject", 2, "building-energy-consumption-prediction", "energy-consumption-data").
+fulfil-privacy-techniques("company-b", "data-subject", 2, "building-energy-consumption-prediction", "housing-characteristics-data").
+fulfil-privacy-techniques("company-c", "data-subject", 2, "building-energy-consumption-prediction", "climate-data").
+
+// Step 3 - Submit participation request for round 2
+
+submit-participation-request("company-a", "company-a", 2, "building-energy-consumption-prediction", "energy-consumption-data", "data-subject").
+submit-participation-request("company-b", "company-a", 2, "building-energy-consumption-prediction", "housing-characteristics-data", "data-subject").
+submit-participation-request("company-c", "company-a", 2, "building-energy-consumption-prediction", "climate-data", "data-subject").
+
+// Verify participation-request-pending holds for round 2
+?Holds(participation-request-pending("company-a", 2, "building-energy-consumption-prediction")).
+?Holds(participation-request-pending("company-b", 2, "building-energy-consumption-prediction")).
+?Holds(participation-request-pending("company-c", 2, "building-energy-consumption-prediction")).
+
+// Step 4 - Verify compliance conditions for round 2
+
+verify-compliance-conditions("company-a", "company-a", 2, "building-energy-consumption-prediction", "energy-consumption-data").
+verify-compliance-conditions("company-a", "company-b", 2, "building-energy-consumption-prediction", "housing-characteristics-data").
+verify-compliance-conditions("company-a", "company-c", 2, "building-energy-consumption-prediction", "climate-data").
+
+// Verify-compliance-conditions-verified 
+?Holds(compliance-conditions-verified("company-a", 2, "building-energy-consumption-prediction")).
+?Holds(compliance-conditions-verified("company-b", 2, "building-energy-consumption-prediction")).
+?Holds(compliance-conditions-verified("company-c", 2, "building-energy-consumption-prediction")).
+
+// Step 5 - Authorize training round 2
+authorize-training-round("company-a", "company-a", 2, "building-energy-consumption-prediction").
+authorize-training-round("company-a", "company-b", 2, "building-energy-consumption-prediction").
+authorize-training-round("company-a", "company-c", 2, "building-energy-consumption-prediction").
+
+// Verify training-round-authorized holds for round 2
+?Holds(training-round-authorized("company-a", 2, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-b", 2, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-c", 2, "building-energy-consumption-prediction")).
+
+// Verify training round 1 is still terminated
+?Holds(training-round-authorized("company-a", 1, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-b", 1, "building-energy-consumption-prediction")).
+?Holds(training-round-authorized("company-c", 1, "building-energy-consumption-prediction")).

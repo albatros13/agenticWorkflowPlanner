@@ -74,6 +74,8 @@ def delete_project(project_id: str, user_id: str | None = None) -> dict:
     _coordinator.machine.apply(project.state, "deleteProject")
     _coordinator.store.delete(uid, project_id)
     _coordinator.cache.remove(project_id)
+    if _coordinator.handoff:
+        _coordinator.handoff.remove(project_id)
     return {"deleted": project_id}
 
 
