@@ -4,7 +4,7 @@ from agents.text_to_bpmn.pipeline.ingestion.base import BlockType
 from agents.text_to_bpmn.pipeline.ingestion.chunker import SemanticChunker
 from agents.text_to_bpmn.pipeline.ingestion.markdown_loader import MarkdownLoader
 
-FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def test_markdown_preserves_structure_and_locations():

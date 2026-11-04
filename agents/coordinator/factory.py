@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 
 from agents.contract import AgentRegistry
+from agents.eflint_verifier.agent import EflintVerifierHandler
 from agents.paths import AGENTS_CONFIG, PROJECT_STATES_CONFIG
 from agents.petri_net_generator.agent import PetriNetGeneratorHandler
 from agents.text_to_bpmn.agent import TextToBpmnHandler
@@ -45,6 +46,8 @@ def build_coordinator(
         "text_to_bpmn": TextToBpmnHandler(),
         "petri_net_generator": PetriNetGeneratorHandler(),  # PM4Py loads lazily on first use
         "text_to_eflint": TextToEflintHandler(),  # LLM provider resolved per request
+        # Client of the external eFLINT model-checking service (EFLINT_VERIFIER_URL, default :8100).
+        "eflint_verifier": EflintVerifierHandler(),
     }
     registry = AgentRegistry.from_config(AGENTS_CONFIG, handlers=handlers)
     machine = StateMachine.from_config(PROJECT_STATES_CONFIG)

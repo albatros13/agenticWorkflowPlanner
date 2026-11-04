@@ -8,7 +8,7 @@ from agents.text_to_bpmn.pipeline.ingestion.chunker import SemanticChunker
 from agents.text_to_bpmn.pipeline.ingestion.markdown_loader import MarkdownLoader
 from agents.text_to_bpmn.pipeline.retrieval.in_memory import InMemoryEvidenceIndex
 
-FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "cases"
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "cases"
 
 CASES = [
     ("01_sequential.md", "physical examination", "physical examination"),

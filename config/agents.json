@@ -32,6 +32,14 @@
       "intents": ["generate_eflint", "validate_eflint"],
       "base_url": null,
       "timeout_s": 600
+    },
+    {
+      "name": "eflint_verifier",
+      "description": "Verify a Petri-net process against an eFLINT specification (qualification rules + bounded model/compliance checking). In-process wrapper around the external eflint-model-checking webservice (EFLINT_VERIFIER_URL, default http://127.0.0.1:8100).",
+      "transport": "in_process",
+      "intents": ["verify_eflint"],
+      "base_url": null,
+      "timeout_s": 600
     }
   ]
 }

@@ -27,17 +27,37 @@ REVISE_DESCRIPTION = "revise_description"
 DELETE_PROJECT = "delete_project"
 VERIFY_MODEL = "verify_model"
 GENERATE_PETRI_NET = "generate_petri_net"
+VERIFY_EFLINT = "verify_eflint"
 UNKNOWN = "unknown"
 
 INTENTS = [
     NEW_PROJECT, ENGINEER_PROCESS, OPEN_PROJECT, LIST_PROJECTS, FIND_PROJECT,
-    PROJECT_STATUS, REVISE_DESCRIPTION, DELETE_PROJECT, VERIFY_MODEL, GENERATE_PETRI_NET, UNKNOWN,
+    PROJECT_STATUS, REVISE_DESCRIPTION, DELETE_PROJECT, VERIFY_MODEL, GENERATE_PETRI_NET,
+    VERIFY_EFLINT, UNKNOWN,
 ]
 
 # A BPMN 2.0 document pasted into a chat message (optionally with an XML declaration).
 _BPMN_XML = re.compile(
     r"(?:<\?xml[^>]*\?>\s*)?<(?P<p>[\w.-]+:)?definitions\b.*?</(?P=p)?definitions\s*>", re.DOTALL)
 PETRI_NET_WORDS = ("petri", "pnml", "workflow net", "woped", "place/transition")
+VERIFY_WORDS = ("verify", "verification", "check", "comply", "complies", "compliant", "compliance",
+                "conform", "violat")
+_NORM_WORDS = re.compile(r"\be-?flint\b|\bnorm(?:s|ative)?\b|\bregulat\w*|\blegal\b|\blaws?\b|"
+                         r"\bqualification\b", re.IGNORECASE)
+_BOUND = re.compile(r"\b(?:bound|max[_ -]?states|depth)\s*(?:of|=|:|is)?\s*(\d+)|\b(\d+)\s+steps\b",
+                    re.IGNORECASE)
+
+# Artifacts for eFLINT verification, pasted as fenced code blocks (```eflint ... ```). The fence
+# language names the kind; unlabelled fences are recognised by their content.
+ATTACHMENT_KINDS = ("eflint", "qualification", "analysis", "pnml", "pn")
+_FENCE_LANGS = {
+    "eflint": "eflint", "flint": "eflint",
+    "qr": "qualification", "qualification": "qualification", "rules": "qualification",
+    "analysis": "analysis", "ltl": "analysis", "properties": "analysis",
+    "pnml": "pnml", "pn": "pn", "petri": "pn", "petri-net": "pn", "petrinet": "pn",
+}
+_FENCE = re.compile(r"```[ \t]*(?P<lang>[\w.+-]*)[^\n]*\n(?P<body>.*?)\n?```", re.DOTALL)
+_PNML_XML = re.compile(r"(?:<\?xml[^>]*\?>\s*)?<(?P<p>[\w.-]+:)?pnml\b.*?</(?P=p)?pnml\s*>", re.DOTALL)
 
 
 def extract_bpmn_xml(text: str) -> tuple[str, str | None]:
@@ -47,6 +67,48 @@ def extract_bpmn_xml(text: str) -> tuple[str, str | None]:
     if not m:
         return text, None
     return (text[:m.start()] + text[m.end():]).strip(), m.group(0)
+
+
+def _sniff(body: str) -> str | None:
+    """Guess the kind of an unlabelled fenced block from its content."""
+    b = body.strip()
+    if re.search(r"<(?:[\w.-]+:)?pnml\b", b):
+        return "pnml"
+    if re.search(r"^\s*Qualify as\b", b, re.MULTILINE):
+        return "qualification"
+    if re.match(r"(?://[^\n]*\n\s*)*(?:Property|Compliance-checking|Plan)\b", b):
+        return "analysis"
+    if re.search(r"^\s*(?:Fact|Act|Event|Duty|Placeholder|Invariant|Predicate|#require)\b", b, re.MULTILINE):
+        return "eflint"
+    if re.search(r"^\s*place\s", b, re.MULTILINE) and re.search(r"^\s*transition\s", b, re.MULTILINE):
+        return "pn"
+    return None
+
+
+def extract_attachments(text: str) -> tuple[str, dict[str, str]]:
+    """Split eFLINT-verification artifacts off a message: ``(prose, {kind: source})``.
+
+    Recognises fenced code blocks (labelled ``eflint`` / ``qualification`` (``qr``) / ``analysis``
+    / ``pnml`` / ``pn``, or unlabelled and recognisable) and a bare PNML document. Like
+    :func:`extract_bpmn_xml`, this is code, not the classifier: artifacts are forwarded verbatim.
+    """
+    found: dict[str, str] = {}
+
+    def take(m: re.Match) -> str:
+        lang = m.group("lang").lower()
+        kind = _FENCE_LANGS.get(lang) or (_sniff(m.group("body")) if lang in ("", "xml", "text", "txt") else None)
+        if kind is None or kind in found:
+            return m.group(0)
+        found[kind] = m.group("body").strip() + "\n"
+        return ""
+
+    prose = _FENCE.sub(take, text)
+    if "pnml" not in found:
+        m = _PNML_XML.search(prose)
+        if m:
+            found["pnml"] = m.group(0)
+            prose = prose[:m.start()] + prose[m.end():]
+    return (re.sub(r"\n{3,}", "\n\n", prose).strip() if found else text), found
 
 
 def _description_in_command(text: str) -> str:
@@ -78,6 +140,15 @@ class HeuristicIntentClassifier(IntentClassifier):
 
         def hit(*words: str) -> bool:
             return any(w in t for w in words)
+
+        # Verification of the process against an eFLINT/normative specification. Checked before
+        # the Petri net rule: "verify the Petri net against the eFLINT norms" is a verification.
+        attached = (context or {}).get("attachments") or []
+        if hit(*VERIFY_WORDS) and (_NORM_WORDS.search(text) or "eflint" in attached):
+            m = _BOUND.search(text)
+            if m:
+                slots["max_states"] = int(m.group(1) or m.group(2))
+            return IntentResult(intent=VERIFY_EFLINT, slots=slots, confidence=0.8)
 
         # First: Petri net requests often embed a process description that would otherwise trip
         # the keyword rules below ("list", "status", "process", ...).
@@ -122,6 +193,7 @@ _SCHEMA = {
         "process_description": {"type": "string"},
         "query": {"type": "string"},
         "semantics_changed": {"type": "boolean"},
+        "max_states": {"type": "integer", "minimum": 0},
     },
     "required": ["intent"],
     "additionalProperties": False,
@@ -134,7 +206,10 @@ _SYSTEM = (
     "- generate_petri_net: translate a process description, an attached BPMN model, or the current "
     "project's model into a Petri net / workflow net / PNML. Put only the process description "
     "itself (if the message contains one) in process_description, without the instruction.\n"
-    "- verify_model: verify/check the current model."
+    "- verify_eflint: verify/check the process (its Petri net or BPMN model) against an eFLINT / "
+    "normative / regulatory specification, i.e. compliance or model checking with qualification "
+    "rules. Put a requested search bound (number of steps) in max_states.\n"
+    "- verify_model: verify/check the current model (no normative specification mentioned)."
 )
 
 

@@ -15,13 +15,14 @@ uv run uvicorn agents.text_to_bpmn.demo.main:app     --port 8080   # text -> BPM
 uv run uvicorn agents.text_to_eflint.demo.main:app   --port 8090   # text -> eFLINT (labelling + generation UI)
 uv run uvicorn agents.text_to_eflint.service:app     --port 8091   # text -> eFLINT agent service
 uv run uvicorn agents.coordinator.service:app        --port 8070   # coordinator
-uv run uvicorn agents.regulatory_docs.demo.main:app  --port 8100   # regulatory docs (upload / find / vectorize to Qdrant)
+uv run uvicorn agents.regulatory_docs.demo.main:app  --port 8110   # regulatory docs (upload / find / vectorize to Qdrant)
 uv run uvicorn agents.petri_net_generator.service:app --port 8200   # text / BPMN -> Petri net (PNML)
+uv run uvicorn agents.eflint_verifier.service:app    --port 8300   # Petri net vs eFLINT verification (needs the external service, below)
 ```
 
 You can also install a single agent's deps into the shared env with its extra, e.g.
 `uv sync --extra regulatory_docs` (extras: `text_to_bpmn`, `text_to_eflint`, `coordinator`,
-`regulatory_docs`, `petri_net_generator`; capability bundles: `llm`, `retrieval`, `ingestion`, `bpmn`,
+`regulatory_docs`, `petri_net_generator`, `eflint_verifier`; capability bundles: `llm`, `retrieval`, `ingestion`, `bpmn`,
 `eflint`, `petri_net`).
 
 ## Option B — one agent on its own (isolated env per agent)
@@ -34,13 +35,14 @@ cd agents/text_to_bpmn     && uv sync && uv run uvicorn agents.text_to_bpmn.demo
 cd agents/text_to_eflint   && uv sync && uv run uvicorn agents.text_to_eflint.demo.main:app  --port 8090
 cd agents/text_to_eflint   && uv sync && uv run uvicorn agents.text_to_eflint.service:app    --port 8091
 cd agents/coordinator      && uv sync && uv run uvicorn agents.coordinator.service:app       --port 8070
-cd agents/regulatory_docs  && uv sync && uv run uvicorn agents.regulatory_docs.demo.main:app --port 8100
+cd agents/regulatory_docs  && uv sync && uv run uvicorn agents.regulatory_docs.demo.main:app --port 8110
 cd agents/petri_net_generator && uv sync && uv run uvicorn agents.petri_net_generator.service:app --port 8200
+cd agents/eflint_verifier  && uv sync && uv run uvicorn agents.eflint_verifier.service:app   --port 8300
 ```
 
 `uv sync` builds a local `.venv/` (git-ignored) in that agent's folder. The per-agent dependency
 set is defined once in the root `pyproject.toml` (the `text_to_bpmn` / `text_to_eflint` /
-`coordinator` / `regulatory_docs` / `petri_net_generator` extras); each `agents/<agent>/pyproject.toml` just selects it.
+`coordinator` / `regulatory_docs` / `petri_net_generator` / `eflint_verifier` extras); each `agents/<agent>/pyproject.toml` just selects it.
 
 ## eFLINT generator (regulatory text -> executable eFLINT)
 
@@ -150,6 +152,93 @@ The service also exposes the shared agent contract (`/agent/manifest`, `/agent/i
 (intent `generate_petri_net`, see `config/agents.json`); to use the standalone service instead set
 `"transport": "http", "base_url": "http://localhost:8200"` for `petri_net_generator`.
 
+## eFLINT verifier (Petri net vs eFLINT specification)
+
+The `eflint_verifier` agent verifies a process (a Petri net, PNML or textual `.pn`) against an
+eFLINT specification through qualification rules. It is a client of the **external** eFLINT
+model-checking webservice (`eflint-model-checking`, Rust + Clingo), which must be running
+separately. Details: [`agents/eflint_verifier/README.md`](agents/eflint_verifier/README.md).
+
+**1. Start the external service** (default `http://127.0.0.1:8100`; options after `--` include
+`--port`, `--bind`, `--workers`):
+
+```bash
+cd <path-to>/eflint-model-checking
+cargo run -p eflint-webservice
+```
+
+If it runs elsewhere, set `EFLINT_VERIFIER_URL` (e.g. in `.env`).
+
+**2a. Through the coordinator** (the agent runs in-process; no extra service needed). Open a
+project, or start without one, and paste the inputs as fenced code blocks:
+
+````text
+Verify the process against this eFLINT specification, bound 10:
+```eflint
+Fact recorded Identified by String.
+Event register Holds when True Creates recorded("case").
+```
+```qualification
+Sequence
+    begin, finish
+Qualify as
+    register.
+```
+```pn
+place ready = 1
+place active
+place done
+transition begin: ready -> active
+transition finish: active -> done
+```
+````
+
+Without a ```` ```pnml ```` / ```` ```pn ```` block, the project's Petri net is used, or one is
+generated from its BPMN model. Without an ```` ```analysis ```` block, the verifier checks that no
+normative violation occurs within the bound. The inputs are kept with the project, so
+*"verify against the eFLINT spec again"* reuses them.
+
+**2b. As a standalone service:**
+
+```bash
+uv sync --extra eflint_verifier        # or: cd agents/eflint_verifier && uv sync
+uv run uvicorn agents.eflint_verifier.service:app --port 8300
+# or: uv run python -m agents.eflint_verifier.service   (port from EFLINT_VERIFIER_PORT, default 8300)
+```
+
+```bash
+jq -n --rawfile pn process.pn --rawfile norms norms.eflint --rawfile rules rules.qr \
+  '{physical: {language: "petri-net", source: $pn},
+    normative: {language: "eflint", source: $norms},
+    qualification: $rules, options: {max_states: 10}}' \
+  | curl -s -X POST localhost:8300/verify -H 'Content-Type: application/json' -d @- \
+  | jq '{verdict, operation, summary, renamed}'
+```
+
+Payload fields:
+
+- `physical` (required) and `normative`: `{language: "petri-net" | "eflint", format?: "pn" | "pnml",
+  source, dependencies?}`. The Petri net format is detected when omitted. `normative` and
+  `qualification` go together.
+- `qualification`: the rules mapping process transitions to eFLINT acts/events/facts.
+- `analysis`: `Property` / `Compliance-checking` / `Plan` declarations. When omitted, a compliance
+  check over all transitions is generated.
+- `operation`: `auto` (default: chosen from the analysis), `model-check`, `compliance-check`,
+  `plan`, `run`, `explore` (with `scenario`), `validate` or `compile` (with `target`).
+- `options`: `max_states` (search bound, default 30), `all`, `verbose`, `timeout_seconds`.
+- `normalize_pnml` (default `true`): convert PNML to the service's profile and naming rules.
+
+The response has `verdict` (`passed` / `failed` / `inconclusive`), `summary`, `properties`
+(outcome, bound and witness steps for each property), the `analysis` that was submitted,
+`renamed` (Petri net names changed for the service) and the raw service result. `POST /verify`
+returns HTTP 502 when the external service fails or cannot be reached. The service also exposes the
+shared agent contract (`/agent/manifest`, `/agent/invoke_sync`, `/agent/invoke`, `/health`).
+
+Each verification is saved under `agents/eflint_verifier/storage/runs/<run_id>/` (override with
+`EFLINT_VERIFIER_RUNS_DIR`). Polling and limits are tunable with `EFLINT_VERIFIER_WAIT_TIMEOUT_S`
+(default 300), `EFLINT_VERIFIER_MAX_STATES` (default 30), `EFLINT_VERIFIER_REQUEST_TIMEOUT_S` and
+`EFLINT_VERIFIER_POLL_INTERVAL_S`.
+
 ## Tests
 
 ```bash
@@ -157,4 +246,6 @@ uv sync --extra dev
 uv run pytest -q
 uv run pytest -q tests/petri_net_generator tests/test_coordinator_petri_net.py   # Petri net agent only
 uv run pytest -q tests/text_to_eflint                                            # text -> eFLINT agent only
+uv run pytest -q tests/eflint_verifier tests/test_coordinator_eflint.py           # eFLINT verifier (offline, fake service)
+EFLINT_VERIFIER_LIVE=1 uv run pytest -q tests/eflint_verifier                     # + live tests against the real service on :8100
 ```

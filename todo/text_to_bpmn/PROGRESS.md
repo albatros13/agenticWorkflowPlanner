@@ -156,6 +156,6 @@ BPMN artifacts (planned with later phases).
 | `test_smoke_pipeline.py` | end-to-end (ingest→evidence→IR→terminology→BPMN/DMN) with mocked LLM; explicit failure on missing artifact |
 | `test_api.py` | `POST /api/generate` returns BPMN + resources (mocked LLM); gateway_kind normalization; empty-text rejected |
 
-Fixtures: `fixtures/cases/*` (6 guideline categories), `fixtures/smoke_bph.md`,
+Fixtures: `tests/text_to_bpmn/fixtures/cases/*` (6 guideline categories), `tests/text_to_bpmn/fixtures/smoke_bph.md`,
 `tests/_ir_fixtures.py` (hand-built IR for compiler tests). Schemas: `schemas/bpmn`,
 `schemas/dmn` (official OMG XSDs).

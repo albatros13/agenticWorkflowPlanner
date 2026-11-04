@@ -81,7 +81,7 @@ or over HTTP, and it has a standalone demo app.
 - FastAPI shim over the handler: `POST /api/upload`, `POST /api/upload_file` (markdown/txt/PDF),
   `GET /api/documents`, `GET /api/profiles`, `POST /api/vectorize`, `GET /api/health`, plus the
   single-page UI at `/`. Mirrors the text→BPMN / text→eFLINT demos.
-- Run: `uvicorn agents.regulatory_docs.demo.main:app --port 8100`.
+- Run: `uvicorn agents.regulatory_docs.demo.main:app --port 8110`.
 
 ---
 

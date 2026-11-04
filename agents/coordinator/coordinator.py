@@ -10,18 +10,23 @@ Flow per message (COORDINATOR_PLAN sec 6):
 5. apply the state transition, record history, and persist.
 
 A BPMN 2.0 document pasted into the message is split off *before* classification (in code) and
-forwarded verbatim to the agent that needs it; the classifier only sees the prose.
+forwarded verbatim to the agent that needs it; the classifier only sees the prose. The same holds
+for eFLINT-verification artifacts pasted as fenced code blocks (eFLINT spec, qualification rules,
+analysis, PNML/.pn Petri net).
 """
 from __future__ import annotations
 
+import re
 import uuid
 
 from pydantic import BaseModel, Field
 
 from agents.contract import AgentRequest, AgentResult, AgentRegistry
+from agents.contract.models import JobStatus
 
 from .cache.base import SemanticProjectCache, SimilarProject
 from .cache.noop import NoOpSemanticCache
+from . import handoff as H
 from .handoff import ModelHandoff
 from . import intent as I
 from .intent import HeuristicIntentClassifier, IntentClassifier
@@ -74,9 +79,12 @@ class Coordinator:
         self, user_id: str, text: str, *, project_id: str | None = None
     ) -> CoordinatorResponse:
         prose, bpmn_xml = I.extract_bpmn_xml(text)
+        prose, attachments = I.extract_attachments(prose)
         context = {"project_id": project_id}
         if bpmn_xml:
             context["attachment"] = "a BPMN 2.0 XML model (removed from the message text)"
+        if attachments:
+            context["attachments"] = sorted(attachments)
         result = self.classifier.classify(prose, context=context)
         intent, slots = result.intent, result.slots
         pid = project_id or slots.get("project_id")
@@ -95,14 +103,16 @@ class Coordinator:
             return self._revise(user_id, pid, slots)
         if intent == I.ENGINEER_PROCESS:
             return self._engineer(user_id, pid, slots, text)
+        if intent == I.VERIFY_EFLINT:
+            return self._verify_eflint(user_id, pid, slots, attachments, bpmn_xml)
         if intent == I.VERIFY_MODEL:
-            return self._verify(user_id, pid)
+            return self._verify(user_id, pid, slots, attachments, bpmn_xml)
         if intent == I.GENERATE_PETRI_NET:
             return self._petri_net(user_id, pid, slots, bpmn_xml)
         return CoordinatorResponse(
             reply="I couldn't tell what you'd like to do. You can start a new project, describe a "
             "process to model, open or list your projects, translate a model to a Petri net, or ask "
-            "to verify a model.",
+            "to verify a model (e.g. against an eFLINT specification).",
             intent=I.UNKNOWN,
             needs_input=True,
         )
@@ -216,6 +226,7 @@ class Coordinator:
             project.runs.append(result.artifacts_ref)
         if self.handoff and result.output.get("bpmn_xml"):
             self.handoff.save_bpmn(project.id, result.output["bpmn_xml"])
+            self.handoff.discard(project.id, H.PNML)  # the Petri net of the old model is stale
         self._apply(project, I.ENGINEER_PROCESS, action, agent=result.agent, summary="Generated/updated BPMN model")
         self.store.save(project)
         self.cache.index_project(project)
@@ -225,10 +236,15 @@ class Coordinator:
             allowed_actions=self.machine.allowed_actions(project.state), agent_result=result,
         )
 
-    def _verify(self, user_id: str, pid: str | None) -> CoordinatorResponse:
+    def _verify(self, user_id: str, pid: str | None, slots: dict | None = None,
+                attachments: dict | None = None, bpmn_xml: str | None = None) -> CoordinatorResponse:
         project = self._load(user_id, pid)
         if project is None:
             return self._no_project(I.VERIFY_MODEL)
+        # The eFLINT verifier is the verification agent whenever the project has its inputs.
+        if self.registry.get_for_intent(I.VERIFY_EFLINT) is not None and (
+                (attachments or {}).get("eflint") or (self.handoff and self.handoff.load(project.id, H.EFLINT))):
+            return self._verify_eflint(user_id, pid, slots or {}, attachments or {}, bpmn_xml)
         if not self.machine.can(project.state, "startVerification"):
             return self._refused(
                 project, I.VERIFY_MODEL,
@@ -304,10 +320,177 @@ class Coordinator:
         if project:
             if result.ok and result.artifacts_ref:
                 project.runs.append(result.artifacts_ref)
+            if result.ok and self.handoff and out.get("pnml"):
+                self.handoff.save(project.id, H.PNML, out["pnml"])
             project.record(HistoryEntry(intent=I.GENERATE_PETRI_NET, agent=result.agent, summary=summary))
             self.store.save(project)
         return self._reply(project, I.GENERATE_PETRI_NET, reply=reply, agent_result=result,
                            needs_input=not result.ok or out.get("status") == "needs_clarification")
+
+    # --- eFLINT verification ---------------------------------------------------------------
+    def _verify_eflint(self, user_id: str, pid: str | None, slots: dict, attachments: dict,
+                       bpmn_xml: str | None) -> CoordinatorResponse:
+        """Verify the process (Petri net) against an eFLINT specification via the eflint_verifier.
+
+        Inputs come from the message (fenced blocks / pasted PNML or BPMN) or, failing that, the
+        active project's hand-off area; anything attached is stored there for the next run. With
+        no Petri net but a BPMN model, the Petri net generator is called first. Without an analysis
+        document the verifier checks compliance (no normative violation within the bound).
+
+        A conclusive verdict on a project that is MODEL_READY_FOR_VERIFICATION drives the lifecycle
+        (startVerification -> completeVerificationSuccess/Failure); otherwise the check is recorded
+        in the history as an ad-hoc run without changing the state.
+        """
+        intent = I.VERIFY_EFLINT
+        project = self._load(user_id, pid)
+        agent = self.registry.get_for_intent(I.VERIFY_EFLINT)
+        if agent is None:
+            return self._reply(project, intent, needs_input=True,
+                               reply="The eFLINT verifier agent is not available.")
+        store = self.handoff if (project and self.handoff) else None
+        if store:  # remember what the user attached, for "verify again"
+            for kind, filename in _ATTACHMENT_FILES.items():
+                if attachments.get(kind):
+                    store.save(project.id, filename, attachments[kind])
+                    if kind in ("pnml", "pn"):  # one physical model per project
+                        store.discard(project.id, H.PETRI_NET_TEXT if kind == "pnml" else H.PNML)
+
+        def pick(kind: str) -> tuple[str | None, str]:
+            if attachments.get(kind):
+                return attachments[kind], "attached"
+            if store:
+                content = store.load(project.id, _ATTACHMENT_FILES[kind])
+                if content:
+                    return content, "the project's"
+            return None, ""
+
+        notes: list[str] = []
+        # 1. The physical model: attached/stored Petri net, else derived from a BPMN model.
+        physical, physical_from = None, ""
+        pnml, origin = pick("pnml")
+        pn, pn_origin = pick("pn")
+        if attachments.get("pn") and not attachments.get("pnml"):
+            pnml = None
+        if pnml:
+            physical, physical_from = {"language": "petri-net", "format": "pnml", "source": pnml}, f"{origin} Petri net"
+        elif pn:
+            physical, physical_from = {"language": "petri-net", "format": "pn", "source": pn}, f"{pn_origin} Petri net"
+        else:
+            bpmn = bpmn_xml or (store.load_bpmn(project.id) if store else None)
+            if bpmn:
+                generated = self._generate_pnml(project, bpmn)
+                if isinstance(generated, str):
+                    origin = "attached" if bpmn_xml else "the project's"
+                    physical = {"language": "petri-net", "format": "pnml", "source": generated}
+                    physical_from = f"the Petri net generated from {origin} BPMN model"
+                    notes.append("I generated the Petri net from the BPMN model first.")
+                else:
+                    return self._reply(project, intent, needs_input=True, agent_result=generated, reply=(
+                        f"I couldn't derive a Petri net from the BPMN model: {generated.error}"))
+
+        eflint, eflint_origin = pick("eflint")
+        rules, _ = pick("qualification")
+        analysis, analysis_origin = pick("analysis")
+
+        missing = [label for label, value in (("a process model (PNML / .pn Petri net, or a BPMN model)", physical),
+                                              ("an eFLINT specification", eflint),
+                                              ("qualification rules", rules)) if not value]
+        if missing:
+            return self._reply(project, intent, needs_input=True,
+                               reply=self._missing_inputs_reply(agent, missing, physical, eflint))
+
+        payload = {"physical": physical, "normative": {"language": "eflint", "source": eflint},
+                   "qualification": rules}
+        if analysis:
+            payload["analysis"] = analysis
+        if slots.get("max_states") is not None:
+            payload["options"] = {"max_states": int(slots["max_states"])}
+        result = agent.invoke(AgentRequest(intent=I.VERIFY_EFLINT, project_id=project.id if project else None,
+                                           correlation_id=uuid.uuid4().hex, payload=payload))
+        out = result.output or {}
+
+        if not result.ok:
+            reply = f"The eFLINT verification could not be completed: {result.error}"
+            summary = f"eFLINT verification error: {result.error}"
+        else:
+            verdict = out.get("verdict")
+            headline = {"passed": "Verification PASSED", "failed": "Verification FAILED",
+                        }.get(verdict, "Verification was INCONCLUSIVE")
+            reply = (f"{headline} — {physical_from} checked against {eflint_origin} eFLINT specification "
+                     f"({out.get('operation')}): {out.get('summary')}.")
+            if out.get("analysis_generated"):
+                notes.append("No analysis was supplied, so I checked that no normative violation occurs in any "
+                             f"execution over all {len(out.get('physical_transitions', []))} process transitions.")
+            elif analysis_origin == "the project's":
+                notes.append("I used the project's stored analysis document.")
+            if verdict == "passed" and out.get("operation") != "plan":
+                notes.append("This is a bounded check: it holds up to the search bound, not for longer executions.")
+            summary = f"eFLINT verification {verdict}: {out.get('summary')}"
+        if out.get("renamed"):
+            pairs = list(out["renamed"].items())
+            shown = ", ".join(f"'{a}' → {b}" for a, b in pairs[:8]) + (" …" if len(pairs) > 8 else "")
+            notes.append(f"Petri net names were normalised for the verifier ({shown}); rules and analyses use the new names.")
+
+        if project:
+            if result.artifacts_ref:
+                project.runs.append(result.artifacts_ref)
+            verdict = out.get("verdict") if result.ok else None
+            if (verdict in ("passed", "failed") and out.get("operation") in ("model-check", "compliance-check")
+                    and self.machine.can(project.state, "startVerification")):
+                self._apply(project, intent, "startVerification", agent=result.agent,
+                            summary="Started eFLINT verification")
+                done = "completeVerificationSuccess" if verdict == "passed" else "completeVerificationFailure"
+                self._apply(project, intent, done, agent=result.agent, summary=summary)
+                notes.append(f"The project is now {project.state}.")
+            else:
+                project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
+            self.store.save(project)
+        if notes:
+            reply += " " + " ".join(notes)
+        return self._reply(project, intent, reply=reply, agent_result=result,
+                           needs_input=not result.ok or out.get("verdict") != "passed")
+
+    def _generate_pnml(self, project: Project | None, bpmn_xml: str) -> str | AgentResult:
+        """BPMN -> PNML through the Petri net generator; the PNML, or the failed AgentResult."""
+        petri = self.registry.get_for_intent(I.GENERATE_PETRI_NET)
+        if petri is None:
+            return AgentResult(agent="coordinator", intent=I.GENERATE_PETRI_NET, status=JobStatus.failed,
+                               error="the Petri net generator agent is not available")
+        payload = {"input_type": "bpmn_xml", "bpmn_xml": bpmn_xml, "output_formats": ["pnml"]}
+        if project:
+            payload["model_name"] = project.name
+        result = petri.invoke(AgentRequest(intent=I.GENERATE_PETRI_NET, project_id=project.id if project else None,
+                                           correlation_id=uuid.uuid4().hex, payload=payload))
+        pnml = (result.output or {}).get("pnml")
+        if not result.ok or not pnml:
+            if result.ok:
+                result = result.model_copy(update={"status": JobStatus.failed, "error": result.error or (
+                    "the generator returned no inline PNML" if (result.output or {}).get("status") != "needs_clarification"
+                    else "the BPMN model is ambiguous; generate the Petri net first to answer its questions")})
+            return result
+        if project and self.handoff:
+            self.handoff.save(project.id, H.PNML, pnml)
+            if result.artifacts_ref:
+                project.runs.append(result.artifacts_ref)
+        return pnml
+
+    def _missing_inputs_reply(self, agent, missing: list[str], physical: dict | None, eflint: str | None) -> str:
+        reply = ("To verify the process against an eFLINT specification I still need "
+                 + ", ".join(missing) + ". Paste each as a fenced code block in your message — ```eflint, "
+                 "```qualification (rules mapping process steps to eFLINT acts/events, ending in '.'), "
+                 "optionally ```analysis (properties; otherwise I check that no violation occurs), and "
+                 "```pnml or ```pn for the Petri net. They are kept with the project for later runs.")
+        if physical is not None:  # tell the user the (normalised) transition names to use in rules
+            probe = agent.invoke(AgentRequest(intent=I.VERIFY_EFLINT, correlation_id=uuid.uuid4().hex,
+                                              payload={"operation": "validate", "physical": physical}))
+            names = (probe.output or {}).get("physical_transitions")
+            if names:
+                reply += " Process transitions: " + ", ".join(names) + "."
+        if eflint:
+            acts = re.findall(r"^\s*(?:Act|Event)\s+([A-Za-z_][\w-]*)", eflint, flags=re.MULTILINE)
+            if acts:
+                reply += " eFLINT acts/events: " + ", ".join(dict.fromkeys(acts)) + "."
+        return reply
 
     # --- helpers ---------------------------------------------------------------
     def _reply(self, project: Project | None, intent: str, *, reply: str, needs_input: bool = False,
@@ -368,6 +551,10 @@ class Coordinator:
             reply="I couldn't find that project. Provide a project id or start a new project.",
             intent=intent, needs_input=True,
         )
+
+
+_ATTACHMENT_FILES = {"eflint": H.EFLINT, "qualification": H.QUALIFICATION, "analysis": H.ANALYSIS,
+                     "pnml": H.PNML, "pn": H.PETRI_NET_TEXT}
 
 
 def _derive_name(description: str) -> str:

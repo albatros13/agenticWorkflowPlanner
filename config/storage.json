@@ -24,6 +24,10 @@
     "text_to_eflint": {
       "kind": "local",
       "path": "agents/text_to_eflint/storage"
+    },
+    "eflint_verifier": {
+      "kind": "local",
+      "path": "agents/eflint_verifier/storage"
     }
   }
 }

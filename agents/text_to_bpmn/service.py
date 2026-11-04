@@ -3,9 +3,9 @@
 Run embedded (the coordinator imports :class:`TextToBpmnHandler` directly) or as its own
 process::
 
-    uvicorn agents.text_to_bpmn.service:app --port 8100
+    uvicorn agents.text_to_bpmn.service:app --port 8120
 
-Then flip ``config/agents.json`` -> ``transport: http, base_url: http://localhost:8100`` and
+Then flip ``config/agents.json`` -> ``transport: http, base_url: http://localhost:8120`` and
 the coordinator reaches it over the network with no code change (COORDINATOR_PLAN sec 9-10).
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ def job_status(job_id: str) -> Job:
 def main() -> None:  # pragma: no cover - manual entrypoint
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("TEXT_TO_BPMN_PORT", "8100")))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("TEXT_TO_BPMN_PORT", "8120")))
 
 
 if __name__ == "__main__":  # pragma: no cover

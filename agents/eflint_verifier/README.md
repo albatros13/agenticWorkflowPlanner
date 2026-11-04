@@ -1,0 +1,67 @@
+# eflint_verifier agent
+
+Verifies a process (Petri net) against an eFLINT specification by calling the **external**
+eFLINT model-checking webservice (`eflint-model-checking`, started with
+`cargo run -p eflint-webservice`, default `http://127.0.0.1:8100`). The coordinator calls it when a
+user asks to verify a process against an eFLINT spec.
+
+## The agent
+
+- The service has its own job API. `eflint_verifier` is an agent that calls it over HTTP. The agent submits the job, polls with backoff, fetches
+  the result, then deletes the job. If a job runs longer than the wait timeout, it cancels it.
+- It returns one verdict (`passed` / `failed` / `inconclusive`), the outcome of each property, and
+  the first counterexample or plan as a list of steps. A found counterexample is a successful call
+  with verdict `failed`. A real error (service unreachable, request rejected, compile error,
+  timeout) is a failed call.
+- If no analysis is supplied, it generates a compliance check over all Petri-net transitions
+  ("no violation within the bound").
+- Each run is saved under `agents/eflint_verifier/storage/runs/<id>/`.
+- It also has a standalone service like the other agents
+  (`uvicorn agents.eflint_verifier.service:app --port 8300`).
+- Settings come from environment variables: `EFLINT_VERIFIER_URL` (default
+  `http://127.0.0.1:8100`), plus `EFLINT_VERIFIER_WAIT_TIMEOUT_S` and `EFLINT_VERIFIER_MAX_STATES`.
+- It's registered in `config/agents.json`, `config/storage.json` and
+  `agents/coordinator/factory.py`, and has an `eflint_verifier` extra (httpx).
+
+## PNML conversion
+
+The service rejected the PNML from `petri_net_generator`. It only accepts a stricter PNML layout,
+and our file includes a `finalmarkings` element it doesn't support. Task names like
+"Submit request" also break its naming rules. The wrapper therefore converts the PNML before
+sending it (`pnml.py`): it adjusts the format, drops the final marking, and renames nodes to slugs
+like `submit-request`. It reports the renames, because qualification rules have to use the new
+names. The converted file is accepted by the live service.
+
+## Coordinator
+
+- **Trigger:** the `verify_eflint` intent, for verify/check/comply wording plus
+  eFLINT/norm/regulation, or an attached eFLINT block. It picks up a search bound from phrases like
+  "bound 12" or "within 12 steps". "Verify the model" also goes to the verifier when the project
+  already has an eFLINT spec.
+- **How users supply inputs:** they paste them as fenced code blocks (```` ```eflint ````,
+  ```` ```qualification ````, ```` ```analysis ````, ```` ```pnml ````/```` ```pn ````). These are
+  split off before classification and saved with the project, so "verify again" needs no
+  re-upload.
+- **No Petri net:** if the project has a BPMN model but no Petri net, the coordinator generates one
+  with the Petri net generator first.
+- **Missing inputs:** it asks for what's missing and lists the process transition names and eFLINT
+  acts/events to use when writing the rules.
+- **Project state:** a pass or fail on a project in `MODEL_READY_FOR_VERIFICATION` moves it to
+  `VERIFIED` or `VERIFICATION_FAILED`. In any other state the check is only recorded in the
+  history. A new BPMN model discards the stored Petri net so it isn't reused out of date.
+
+## Tests
+
+29 offline tests (a fake of the service's job API, `tests/eflint_verifier/` and
+`tests/test_coordinator_eflint.py`) plus 2 tests against the live service. Run the live ones with:
+
+```sh
+EFLINT_VERIFIER_LIVE=1 pytest tests/eflint_verifier
+```
+
+## Limitations / next steps
+
+Qualification rules are always required. The coordinator doesn't create them, and it doesn't yet
+pass the output of `text_to_eflint` into verification, so the eFLINT spec has to be pasted too. A
+natural next step would be an LLM step that drafts the rules and checks them with the service's
+`validate` operation.

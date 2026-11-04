@@ -33,7 +33,7 @@ byte-identical.
   `AgentResult`. Provider is injectable (tests / coordinator) or env-selected.
 - `service.py` — standalone FastAPI service (`/agent/manifest`, `/agent/invoke_sync`,
   `/agent/invoke` + `/agent/jobs/{id}`, `/health`) so the agent can run **externally** on its own
-  port (`:8100`).
+  port (`:8120`).
 - `app/main.py` refactored into a thin back-compat shim that delegates to `TextToBpmnHandler`
   (existing `test_api.py` still passes unchanged).
 
@@ -105,8 +105,8 @@ Single-page front end served at `/`:
 uvicorn agents.coordinator.service:app --port 8000
 
 # Distributed: run the agent as an external HTTP service, then set config/agents.json
-#   text_to_bpmn -> { "transport": "http", "base_url": "http://localhost:8100" }
-uvicorn agents.text_to_bpmn.service:app --port 8100
+#   text_to_bpmn -> { "transport": "http", "base_url": "http://localhost:8120" }
+uvicorn agents.text_to_bpmn.service:app --port 8120
 uvicorn agents.coordinator.service:app  --port 8000
 ```
 

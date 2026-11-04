@@ -1,0 +1,20 @@
+# Standalone project for the eFLINT verifier agent (a wrapper around the external
+# eflint-model-checking webservice, which must be running separately — by default on :8100):
+#
+#     cd agents/eflint_verifier
+#     uv sync
+#     uv run uvicorn agents.eflint_verifier.service:app --port 8300
+#
+# The dependency set is defined once in the root pyproject's `eflint_verifier` extra.
+[project]
+name = "eflint-verifier-agent"
+version = "0.1.0"
+description = "Verifies Petri-net processes against eFLINT specifications via the external eFLINT model-checking service."
+requires-python = ">=3.11"
+dependencies = ["agentic-workflow-planner[eflint_verifier]"]
+
+[tool.uv.sources]
+agentic-workflow-planner = { path = "../..", editable = true }
+
+[tool.uv]
+package = false

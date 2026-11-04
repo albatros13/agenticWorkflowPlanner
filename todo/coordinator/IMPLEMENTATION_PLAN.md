@@ -76,7 +76,7 @@ and a **semantic cache** for finding existing/similar projects.
                    │  TEXT→BPMN AGENT       │   │  (future external agents)  │
                    │  wraps existing src/   │   │  e.g. simulation, critic,  │
                    │  pipeline UNCHANGED    │   │  KG, other teams' services │
-                   │  own service :8100     │   │  own ports / remote URLs   │
+                   │  own service :8120     │   │  own ports / remote URLs   │
                    └───────────────────────┘   └───────────────────────────┘
 
      Persistence:   ProjectStore (JSON on disk now; pluggable)  +  runs/ artifacts (unchanged)
@@ -131,7 +131,7 @@ agents:
     transport: in_process           # or: http
     intents: [engineer_process]
     # when transport == http:
-    # base_url: http://localhost:8100
+    # base_url: http://localhost:8120
     # timeout_s: 300
 ```
 Switching the text→BPMN agent from embedded to remote = flip `transport` + set `base_url`. No
@@ -175,7 +175,7 @@ agents/                         # NEW — everything agent/coordination related
   text_to_bpmn/                 # NEW — thin wrapper making current pipeline an agent
     __init__.py
     agent.py                    # adapter: AgentRequest -> src.pipeline.Pipeline -> AgentResult
-    service.py                  # standalone FastAPI service exposing the agent contract (:8100)
+    service.py                  # standalone FastAPI service exposing the agent contract (:8120)
 
 config/
   agents.json                   # NEW — agent registry manifest (which agents, transport, urls)
@@ -298,7 +298,7 @@ Config flag (in `config/agents.json` or settings): `semantic_cache: "noop" | "qd
   **The `src/` pipeline code is not edited.** This adapter is the only new code, and it is a
   translation layer between the contract and the current function calls.
 - `text_to_bpmn/service.py` — a standalone FastAPI app exposing `/agent/manifest`,
-  `/agent/invoke`, `/agent/jobs/{id}`, `/health` on its own port (e.g. `:8100`), so the agent can
+  `/agent/invoke`, `/agent/jobs/{id}`, `/health` on its own port (e.g. `:8120`), so the agent can
   run as an external service. Long runs use a background task + the `runs/` store as the job store.
 - Because the adapter satisfies the same `Agent` protocol as `HttpAgent`, the coordinator can call
   the text→BPMN agent **in-process** (default, fast, current behavior) or **over HTTP** (when
@@ -309,14 +309,14 @@ Config flag (in `config/agents.json` or settings): `semantic_cache: "noop" | "qd
 ## 10. Configuration & deployment
 
 - New env / settings (extend `src/config.py` `Settings` — additive, no breaking change):
-  - `COORDINATOR_PORT` (default 8000), `TEXT_TO_BPMN_PORT` (default 8100),
+  - `COORDINATOR_PORT` (default 8000), `TEXT_TO_BPMN_PORT` (default 8120),
   - `PROJECTS_DIR` (default `<repo>/projects`),
   - `SEMANTIC_CACHE` (`noop` default),
   - `AGENTS_CONFIG` (default `config/agents.json`).
 - Run modes:
   - **All-in-one (dev, default):** coordinator imports the text→BPMN agent in-process. One
     process, current behavior preserved.
-  - **Distributed:** run `text_to_bpmn/service.py` on `:8100`, set its registry entry to
+  - **Distributed:** run `text_to_bpmn/service.py` on `:8120`, set its registry entry to
     `transport: http`, run `coordinator/service.py` on `:8000`. Demonstrates the external-agent
     path.
 - Add `projects/` to `.gitignore` (like `runs/`).

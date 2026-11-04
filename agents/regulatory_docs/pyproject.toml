@@ -3,7 +3,7 @@
 # Run it on its own:
 #     cd agents/regulatory_docs
 #     uv sync                      # builds .venv with just this agent's deps
-#     uv run uvicorn agents.regulatory_docs.demo.main:app --port 8100
+#     uv run uvicorn agents.regulatory_docs.demo.main:app --port 8110
 #
 # Installs the monorepo (editable) with the `regulatory_docs` extra: the shared
 # document ingestion (via text->BPMN), OpenAI embeddings + qdrant-client for the

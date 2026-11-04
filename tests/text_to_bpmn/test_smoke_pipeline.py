@@ -10,7 +10,7 @@ from agents.text_to_bpmn.pipeline.llm.mock import ScriptedLLMProvider
 from agents.text_to_bpmn.pipeline.pipeline.artifacts import ArtifactStore, MissingArtifactError
 from agents.text_to_bpmn.pipeline.pipeline.runner import Pipeline
 
-FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def _scripted_provider(chunk_by_section):
