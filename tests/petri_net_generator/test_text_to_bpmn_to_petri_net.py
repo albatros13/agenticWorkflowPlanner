@@ -12,9 +12,12 @@ resulting net and the files written for inspection in an external Petri-net tool
 """
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("pm4py", reason="PM4Py is not installed: install the `petri_net_generator` extra (`uv sync --extra petri_net_generator`)")
+
 import json
 
-import pytest
 from pm4py.objects.petri_net.importer.variants.pnml import import_net_from_string
 
 from agents.contract import AgentRequest

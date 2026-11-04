@@ -51,6 +51,15 @@
   @keyframes spin { to { transform:rotate(360deg);} }
   .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
   .toolbar button { background:#f1f5f9; color:#334155; font-size:12px; padding:5px 10px; }
+  #left { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  #runs { list-style:none; margin:0; padding:0; max-height:340px; overflow:auto; }
+  #runs li { padding:7px 8px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+  #runs li:hover { background:#f8fafc; border-color:var(--line); }
+  #runs li.active { background:#eff6ff; border-color:#bfdbfe; }
+  #runs .name { font-weight:600; }
+  #runs .meta { color:var(--muted); font-size:12px; }
+  .warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px 10px; border-radius:8px; font-size:12.5px; margin-bottom:10px; }
+  pre.source { white-space:pre-wrap; font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace; background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:10px; max-height:320px; overflow:auto; margin:8px 0 0; }
 </style>
 </head>
 <body>
@@ -60,6 +69,7 @@
 </header>
 
 <div class="wrap">
+  <div id="left">
   <!-- INPUT -->
   <div class="card">
     <h2>Input</h2>
@@ -75,6 +85,14 @@
     <div class="row muted" id="status"></div>
   </div>
 
+  <!-- STORED RUNS -->
+  <div class="card">
+    <div class="toolbar"><h2 style="margin:0">Stored diagrams</h2><button id="refresh" type="button">Refresh</button></div>
+    <ul id="runs"><li class="muted">Loading…</li></ul>
+    <div class="muted" id="runs-note" style="font-size:12px;margin-top:6px"></div>
+  </div>
+  </div>
+
   <!-- RESULTS -->
   <div id="right">
     <div class="card">
@@ -87,7 +105,7 @@
       </div>
       <div class="badges" id="badges"></div>
       <div id="canvas"></div>
-      <div id="diagram-msg" class="muted" style="margin-top:8px">Diagram will appear here after Generate.</div>
+      <div id="diagram-msg" class="muted" style="margin-top:8px">Diagram will appear here after Generate, or pick a stored diagram.</div>
     </div>
     <div id="resources"></div>
   </div>
@@ -96,7 +114,7 @@
 <script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.development.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-let viewer = null, lastBpmn = null;
+let viewer = null, lastBpmn = null, lastRunId = null;
 
 const SAMPLE = `# BPH medical treatment
 
@@ -132,7 +150,7 @@ $('#dl').onclick = () => {
   if (!lastBpmn) return;
   const blob = new Blob([lastBpmn], { type: 'application/xml' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'process.bpmn'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = lastRunId ? `${lastRunId}.bpmn` : 'process.bpmn'; a.click();
 };
 
 async function generate() {
@@ -150,6 +168,7 @@ async function generate() {
     if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
     await render(data);
     $('#status').textContent = `Done · run ${data.run_id} · ${data.provider}`;
+    loadRuns();  // the new run is now stored
   } catch (err) {
     $('#diagram-msg').innerHTML = '';
     $('#resources').innerHTML = `<div class="card"><div class="err">Generation failed:\n${err.message}</div></div>`;
@@ -162,7 +181,8 @@ $('#gen').onclick = generate;
 
 async function render(data) {
   // Diagram
-  lastBpmn = data.bpmn_xml;
+  lastBpmn = data.bpmn_xml; lastRunId = data.run_id || null;
+  document.querySelectorAll('#runs li').forEach(li => li.classList.toggle('active', li.dataset.run === lastRunId));
   $('#diagram-msg').textContent = '';
   try {
     await ensureViewer().importXML(data.bpmn_xml);
@@ -182,7 +202,59 @@ async function render(data) {
 
   // Resources
   renderResources(data.resources);
+  if (data.stored) renderStoredInfo(data);
 }
+
+// --- stored runs ----------------------------------------------------------------------------
+async function loadRuns() {
+  try {
+    const res = await fetch('/api/runs'); const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    $('#runs').innerHTML = data.runs.map(r => `
+      <li data-run="${esc(r.run_id)}" class="${r.run_id === lastRunId ? 'active' : ''}">
+        <div class="name">${esc(r.process_name || 'Untitled process')}</div>
+        <div class="meta">${esc(r.run_id)} · ${esc(new Date(r.saved_at).toLocaleString())}</div>
+        <div class="meta">${r.nodes ?? '?'} nodes · ${r.flows ?? '?'} flows${r.has_dmn ? ' · DMN' : ''}${r.provider ? ' · ' + esc(r.provider) : ''}</div>
+      </li>`).join('') || '<li class="muted">No stored diagrams yet.</li>';
+    $('#runs-note').textContent = data.runs.length ? '' : 'Runs are saved in ' + data.runs_dir;
+    document.querySelectorAll('#runs li[data-run]').forEach(li => li.onclick = () => openRun(li.dataset.run));
+  } catch (err) { $('#runs').innerHTML = `<li class="muted">${esc(err.message)}</li>`; }
+}
+
+async function openRun(runId) {
+  $('#status').innerHTML = `<span class="spinner" style="border-color:var(--accent);border-top-color:transparent"></span> Loading run ${esc(runId)}…`;
+  $('#resources').innerHTML = ''; $('#badges').innerHTML = '';
+  try {
+    const res = await fetch('/api/runs/' + encodeURIComponent(runId)); const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    await render(data);
+    $('#status').textContent = `Showing stored run ${data.run_id} · saved ${new Date(data.saved_at).toLocaleString()}${data.provider ? ' · ' + data.provider : ''}`;
+    history.replaceState(null, '', '?run=' + encodeURIComponent(data.run_id));
+  } catch (err) {
+    $('#diagram-msg').innerHTML = '';
+    $('#resources').innerHTML = `<div class="card"><div class="err">Could not load run ${esc(runId)}:\n${esc(err.message)}</div></div>`;
+    $('#status').textContent = 'Failed.';
+  }
+}
+
+function renderStoredInfo(data) {
+  const warn = (data.warnings || []).length
+    ? `<div class="warn">Parts of this run could not be shown:<br>${data.warnings.map(esc).join('<br>')}</div>` : '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `${warn}
+    <div class="toolbar"><h2 style="margin:0">Source text${data.source_document ? ' · ' + esc(data.source_document) : ''}</h2>
+      <button type="button" id="reuse">Copy to input</button></div>
+    ${data.source_text ? `<pre class="source">${esc(data.source_text)}</pre>` : '<span class="muted">The run has no stored source text.</span>'}`;
+  $('#resources').prepend(card);
+  $('#reuse').onclick = () => { $('#text').value = data.source_text || ''; $('#pname').value = data.process_name || '';
+                                $('#status').textContent = 'Source text copied to the input; edit it and Generate to make a new run.'; };
+}
+
+$('#refresh').onclick = loadRuns;
+loadRuns();
+const presetRun = new URLSearchParams(location.search).get('run');   // deep link: /?run=<run_id>
+if (presetRun) openRun(presetRun);
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 

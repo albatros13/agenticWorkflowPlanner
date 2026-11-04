@@ -1,0 +1,98 @@
+uv run pytest tests/petri_net_generator -s
+======================================================================================================= test session starts ========================================================================================================
+platform linux -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/natal/PycharmProjects/UVA/agenticWorkflowPlanner
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 43 items
+
+tests/petri_net_generator/test_agent_and_service.py ......
+tests/petri_net_generator/test_bpmn_and_pnml.py ......................
+tests/petri_net_generator/test_ir_compiler.py .............
+tests/petri_net_generator/test_text_to_bpmn_to_petri_net.py
+=== BPMN XML from text_to_bpmn -> Petri net: Follow-up ===
+places=5 transitions=5 (silent 1) arcs=10  source=source sink=sink
+soundness: passed — Explored 5 reachable markings.
+PNML: /tmp/pytest-of-natal/pytest-29/test_petri_net_from_text_to_bp0/follow_up.pnml
+DOT:  /tmp/pytest-of-natal/pytest-29/test_petri_net_from_text_to_bp0/follow_up.dot
+<?xml version='1.0' encoding='UTF-8'?>
+<pnml>
+  <net id="Follow-up" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+    <name>
+      <text>Follow-up</text>
+    </name>
+    <page id="page0">
+      <place id="ent_D1_eval">
+        <name>
+          <text>ent_D1_eval</text>
+        </name>
+      </place>
+      <place id="ent_E">
+        <name>
+          <text>ent_E</text>
+        </name>
+      </place>
+      <place id="exi_D1">
+        <name>
+          <text>exi_D1</text>
+        </name>
+      </place>
+      <place id="sink">
+        <name>
+          <text>sink</text>
+        </name>
+      </place>
+      <place id="source">
+        <name>
+          <text>source</text>
+        </name>
+        <initialMarking>
+          <text>1</text>
+        </initialMarking>
+      </place>
+      <transition id="A1">
+        <name>
+          <text>Assess IPSS</text>
+        </name>
+      </transition>
+      <transition id="A2">
+        <name>
+          <text>Continue treatment</text>
+        </name>
+      </transition>
+      <transition id="A3">
+        <name>
+          <text>Refer back to urologist</text>
+        </name>
+      </transition>
+      <transition id="D1_eval">
+        <name>
+          <text>Evaluate Improved &gt;= 25%?</text>
+        </name>
+      </transition>
+      <transition id="E">
+        <name>
+          <text>E</text>
+        </name>
+        <toolspecific tool="ProM" version="6.4" activity="$invisible$" localNodeID="E"/>
+      </transition>
+      <arc id="a1" source="A1" target="ent_D1_eval"/>
+      <arc id="a2" source="A2" target="ent_E"/>
+      <arc id="a3" source="A3" target="ent_E"/>
+      <arc id="a4" source="D1_eval" target="exi_D1"/>
+      <arc id="a5" source="E" target="sink"/>
+      <arc id="a6" source="ent_D1_eval" target="D1_eval"/>
+      <arc id="a7" source="ent_E" target="E"/>
+      <arc id="a8" source="exi_D1" target="A2"/>
+      <arc id="a9" source="exi_D1" target="A3"/>
+      <arc id="a10" source="source" target="A1"/>
+    </page>
+    <finalmarkings>
+      <marking>
+        <place idref="sink">
+          <text>1</text>
+        </place>
+      </marking>
+    </finalmarkings>
+  </net>
+</pnml>

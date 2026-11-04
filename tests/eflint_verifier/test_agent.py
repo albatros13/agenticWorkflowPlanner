@@ -3,6 +3,10 @@ import json
 
 import pytest
 
+from ._deps import require_deps
+
+require_deps()
+
 from agents.contract import AgentRequest
 from agents.eflint_verifier.agent import (VERIFY_EFLINT, EflintVerifierHandler, infer_operation,
                                           verdict_of)

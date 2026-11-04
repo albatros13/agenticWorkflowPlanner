@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import pytest
+
+pytest.importorskip("pm4py", reason="PM4Py is not installed: install the `petri_net_generator` extra (`uv sync --extra petri_net_generator`)")
+
 from lxml import etree
 from pm4py.objects.petri_net.importer.variants.pnml import import_net_from_string
 from pm4py.objects.petri_net.obj import Marking, PetriNet

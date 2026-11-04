@@ -170,7 +170,8 @@ def health() -> dict:
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    # no-cache: browsers revalidate (cheap 304) instead of showing a stale page after an update
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR)), name="static")

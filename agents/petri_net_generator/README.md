@@ -65,6 +65,8 @@ larger than `PETRI_NET_MAX_INLINE_PNML_BYTES` is only returned by reference (`pn
 | `net_validation.py` | Structural / workflow-net checks, bounded soundness, trace enumeration. |
 | `exporters.py` | PNML (stable IDs) and DOT. |
 | `config.py` | Environment-backed limits. |
+| `from_bpmn_run.py` | Command line: convert a saved `text_to_bpmn` run (see below). |
+| `demo/` | Viewer web app: `main.py` (FastAPI), `view.py` (PNML → view model, token game, DOT), `static/index.html`. |
 
 ## Running
 
@@ -87,6 +89,68 @@ service also serves the agent contract (`/agent/manifest`, `/agent/invoke_sync`,
 `"transport": "http", "base_url": "http://localhost:8200"` for `petri_net_generator` in
 `config/agents.json`. More examples are in [`RUN.md`](../../RUN.md).
 
+## Viewer demo (web app)
+
+`demo/` is a small web application that visualizes Petri nets and plays the token game:
+
+```bash
+uv run uvicorn agents.petri_net_generator.demo.main:app --port 8210     # open http://localhost:8210
+```
+
+- **Open a net:** pick one saved by the generator (`storage/runs/<pnml_ref>/net.pnml`), convert a
+  saved `text_to_bpmn` run with one click, or upload/paste any `.pnml` file. `/?ref=<pnml_ref>`
+  opens a saved net directly.
+- **Token game:** enabled transitions are drawn in green. Click one in the diagram (or in the
+  *Enabled transitions* list) to fire it. The page shows the fired sequence and the current marking,
+  and says when the final marking or a deadlock is reached. Undo and Reset are available.
+- **Display:** zoom and pan, left→right or top→bottom layout, and export as SVG or PNML. On open it
+  also shows the structural findings and the soundness verdict.
+
+Existing libraries do the standard work:
+- **PM4Py** parses the PNML and provides the firing semantics.
+- **Graphviz** draws the net in the usual Petri net notation, running in the browser as WebAssembly
+  ([`@viz-js/viz`](https://github.com/mdaines/viz-js)). No system install is needed, but the page
+  loads it and **svg-pan-zoom** from jsDelivr, so the browser needs internet access. `POST /api/svg`
+  renders on the server instead when the Graphviz `dot` binary is installed.
+
+PNML `<graphics><position>` coordinates (from editors such as WoPeD or YAPNE) are honoured: when
+every node has one, the drawing keeps the editor's layout. When a file declares no final marking,
+PM4Py infers one (the places without outgoing arcs), and the viewer labels it as inferred.
+
+Uploaded documents are parsed with a hardened XML parser (no DTDs, entities or network access)
+before they reach PM4Py. The API is stateless: each request carries the PNML (or a saved net's
+`ref`) and the current marking.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/nets` | Saved nets, newest first (name, input type, size, soundness). |
+| `GET /api/nets/{ref}/pnml` | Download a saved net. |
+| `POST /api/view` | `{pnml` or `ref, marking?, rankdir?, analyze?}` → nodes, enabled transitions, status, DOT, findings, soundness. |
+| `POST /api/fire` | `{pnml` or `ref, marking, transition}` → the view after firing. |
+| `GET /api/bpmn_runs`, `POST /api/convert` | List / convert `text_to_bpmn` runs (same as `from_bpmn_run`). |
+| `POST /api/svg` | Server-side Graphviz rendering of a DOT document (fallback). |
+
+## Converting a text_to_bpmn run
+
+`from_bpmn_run.py` converts the model of a saved `text_to_bpmn` run
+(`agents/text_to_bpmn/storage/runs/<run_id>/`, or `RUNS_DIR`) without starting any service:
+
+```bash
+uv run python -m agents.petri_net_generator.from_bpmn_run                    # list runs that have a BPMN model
+uv run python -m agents.petri_net_generator.from_bpmn_run 22b4425994a4       # convert one run (id or folder path)
+uv run python -m agents.petri_net_generator.from_bpmn_run --all --out nets/ --dot   # every run; copy PNML + DOT to nets/
+```
+
+It reads the BPMN XML from the run's `bpmn.json` (or the graph IR from `ir.json` with
+`--source ir`) and converts it through the agent handler, so each net is validated,
+soundness-checked and saved under this agent's `storage/runs/<pnml_ref>/net.pnml`. `--out DIR`
+also writes `<run_id>.pnml` (and `.dot`). Other options: `--no-soundness`, `--runs-dir`. It prints
+one line per run. The exit status is 0 if every run converted, 1 if any failed (for example an
+unsupported BPMN element), and 2 for an unknown run or a run without `bpmn.json`.
+
+This is a developer tool: it reads another agent's private run folder. At runtime the coordinator
+passes models through the shared hand-off area instead.
+
 ## Configuration
 
 | Var | Default | Purpose |
@@ -104,10 +168,18 @@ paths, `ir.json`.
 
 ## Tests
 
-`tests/petri_net_generator/` (43 tests) and `tests/test_coordinator_petri_net.py`. They assert
+`tests/petri_net_generator/` (59 tests, including the `from_bpmn_run` command and the viewer demo) and `tests/test_coordinator_petri_net.py`. They assert
 behaviour through enumerated traces, check that PNML round-trips through PM4Py, and include an
-end-to-end text → BPMN → Petri net demo (`pytest tests/petri_net_generator -s` prints it). They
-skip when PM4Py is not installed.
+end-to-end text → BPMN → Petri net demo, which `-s` prints:
+
+```bash
+uv run pytest tests/petri_net_generator -s     # or `pytest ...` inside an activated .venv
+```
+
+Run them in the project environment. A system `pytest` (e.g. `/usr/bin/pytest`) lacks the
+project's dependencies, and the suite then stops with a message saying so. In a project env
+installed without the `petri_net_generator` extra, each module is reported as skipped with the
+reason "PM4Py is not installed".
 
 ## Next steps
 

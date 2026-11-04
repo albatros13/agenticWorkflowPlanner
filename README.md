@@ -191,7 +191,7 @@ The HTTP API (`POST /coordinator/message`, `GET /coordinator/projects`, …) is 
 | Agent | Command | Port |
 | --- | --- | --- |
 | text_to_bpmn | `uvicorn agents.text_to_bpmn.service:app` (contract) / `agents.text_to_bpmn.demo.main:app` (demo UI) | 8120 / 8080 |
-| petri_net_generator | `uvicorn agents.petri_net_generator.service:app` | 8200 |
+| petri_net_generator | `uvicorn agents.petri_net_generator.service:app` / `agents.petri_net_generator.demo.main:app` (viewer + token game) | 8200 / 8210 |
 | eflint_verifier | `uvicorn agents.eflint_verifier.service:app` (needs the external service on 8100) | 8300 |
 | text_to_eflint | `uvicorn agents.text_to_eflint.service:app` / `agents.text_to_eflint.demo.main:app` (demo UI) | 8091 / 8090 |
 | regulatory_docs | `uvicorn agents.regulatory_docs.demo.main:app` (demo UI) | 8110 |
@@ -241,7 +241,11 @@ opt-in:
 - `tests/regulatory_docs/test_cloud_qdrant.py` writes to a throwaway collection on the live cloud
   Qdrant (and deletes it) when `QDRANT_URL` / `QDRANT_API_KEY` are set;
 - `tests/eflint_verifier/test_live_service.py` runs against the real eFLINT model-checking service
-  when `EFLINT_VERIFIER_LIVE=1`.
+  when `EFLINT_VERIFIER_LIVE=1` (add `EFLINT_VERIFIER_KEEP_RUNS=1` to keep its run records in the
+  agent's storage).
+
+`pytest` here means the project environment's pytest (activated `.venv`, or `uv run pytest`). A
+system `pytest` lacks the dependencies.
 
 ---
 

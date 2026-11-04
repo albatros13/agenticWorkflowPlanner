@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import pytest
+
+pytest.importorskip("pm4py", reason="PM4Py is not installed: install the `petri_net_generator` extra (`uv sync --extra petri_net_generator`)")
+
 from pydantic import ValidationError
 
 from agents.petri_net_generator.compiler import compile_ir

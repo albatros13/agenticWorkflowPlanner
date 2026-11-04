@@ -53,11 +53,20 @@ names. The converted file is accepted by the live service.
 ## Tests
 
 29 offline tests (a fake of the service's job API, `tests/eflint_verifier/` and
-`tests/test_coordinator_eflint.py`) plus 2 tests against the live service. Run the live ones with:
+`tests/test_coordinator_eflint.py`) plus 2 tests against the live service. Run them with the
+project environment (`uv run pytest`, or `.venv/bin/python -m pytest`), not a system `pytest`. A
+system Python lacks pydantic/httpx; the tests then skip with that reason, and with
+`EFLINT_VERIFIER_LIVE=1` pytest stops with an error.
 
 ```sh
-EFLINT_VERIFIER_LIVE=1 pytest tests/eflint_verifier
+uv run pytest tests/eflint_verifier tests/test_coordinator_eflint.py    # offline
+EFLINT_VERIFIER_LIVE=1 uv run pytest tests/eflint_verifier -v           # + live tests (service on :8100)
+EFLINT_VERIFIER_LIVE=1 EFLINT_VERIFIER_KEEP_RUNS=1 uv run pytest tests/eflint_verifier/test_live_service.py -s
 ```
+
+Tests write their run records to pytest's temporary directory, so normally nothing appears in
+`storage/runs/`. With `EFLINT_VERIFIER_KEEP_RUNS=1` the live tests write to the agent's storage
+(or `EFLINT_VERIFIER_RUNS_DIR`), and `-s` prints each run's folder.
 
 ## Limitations / next steps
 

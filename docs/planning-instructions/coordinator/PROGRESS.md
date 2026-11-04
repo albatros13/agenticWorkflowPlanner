@@ -1,7 +1,7 @@
 # Coordinator Agent — PROGRESS
 
-Refactor implementing [`todo/COORDINATOR_PLAN.md`](../../todo/COORDINATOR_PLAN.md) and the project
-lifecycle from [`todo/PROJECT_STATE_MANAGEMENT.md`](../../todo/PROJECT_STATE_MANAGEMENT.md).
+Refactor implementing [`todo/COORDINATOR_PLAN.md`](../COORDINATOR_PLAN.md) and the project
+lifecycle from [`todo/PROJECT_STATE_MANAGEMENT.md`](../PROJECT_STATE_MANAGEMENT.md).
 
 **Status: Phases A–F complete.** `pytest -q` → **81 passed** (was 46), fully offline (no API keys).
 The BPMN pipeline is **unchanged** (only relocated, see below); the demo `/api/generate` output is

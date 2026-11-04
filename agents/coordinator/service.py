@@ -81,7 +81,8 @@ def delete_project(project_id: str, user_id: str | None = None) -> dict:
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    # no-cache: browsers revalidate (cheap 304) instead of showing a stale page after an update
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 if STATIC_DIR.exists():

@@ -17,6 +17,7 @@ uv run uvicorn agents.text_to_eflint.service:app     --port 8091   # text -> eFL
 uv run uvicorn agents.coordinator.service:app        --port 8070   # coordinator
 uv run uvicorn agents.regulatory_docs.demo.main:app  --port 8110   # regulatory docs (upload / find / vectorize to Qdrant)
 uv run uvicorn agents.petri_net_generator.service:app --port 8200   # text / BPMN -> Petri net (PNML)
+uv run uvicorn agents.petri_net_generator.demo.main:app --port 8210  # Petri net viewer (token game)
 uv run uvicorn agents.eflint_verifier.service:app    --port 8300   # Petri net vs eFLINT verification (needs the external service, below)
 ```
 
@@ -37,6 +38,7 @@ cd agents/text_to_eflint   && uv sync && uv run uvicorn agents.text_to_eflint.se
 cd agents/coordinator      && uv sync && uv run uvicorn agents.coordinator.service:app       --port 8070
 cd agents/regulatory_docs  && uv sync && uv run uvicorn agents.regulatory_docs.demo.main:app --port 8110
 cd agents/petri_net_generator && uv sync && uv run uvicorn agents.petri_net_generator.service:app --port 8200
+cd agents/petri_net_generator && uv sync && uv run uvicorn agents.petri_net_generator.demo.main:app --port 8210
 cd agents/eflint_verifier  && uv sync && uv run uvicorn agents.eflint_verifier.service:app   --port 8300
 ```
 
@@ -152,6 +154,20 @@ The service also exposes the shared agent contract (`/agent/manifest`, `/agent/i
 (intent `generate_petri_net`, see `config/agents.json`); to use the standalone service instead set
 `"transport": "http", "base_url": "http://localhost:8200"` for `petri_net_generator`.
 
+**Viewer:** `uv run uvicorn agents.petri_net_generator.demo.main:app --port 8210`, then open
+http://localhost:8210. You can browse the saved nets, convert text_to_bpmn runs, upload any `.pnml`,
+and click transitions to play the token game (see the agent README).
+
+**From a saved text_to_bpmn run** (no service needed), e.g. a model generated earlier through the
+coordinator or the text_to_bpmn demo:
+
+```bash
+uv run python -m agents.petri_net_generator.from_bpmn_run                  # list runs
+uv run python -m agents.petri_net_generator.from_bpmn_run <run_id> --out nets/ --dot
+```
+
+See [`agents/petri_net_generator/README.md`](agents/petri_net_generator/README.md#converting-a-text_to_bpmn-run).
+
 ## eFLINT verifier (Petri net vs eFLINT specification)
 
 The `eflint_verifier` agent verifies a process (a Petri net, PNML or textual `.pn`) against an
@@ -248,4 +264,8 @@ uv run pytest -q tests/petri_net_generator tests/test_coordinator_petri_net.py  
 uv run pytest -q tests/text_to_eflint                                            # text -> eFLINT agent only
 uv run pytest -q tests/eflint_verifier tests/test_coordinator_eflint.py           # eFLINT verifier (offline, fake service)
 EFLINT_VERIFIER_LIVE=1 uv run pytest -q tests/eflint_verifier                     # + live tests against the real service on :8100
+                                                    # (add EFLINT_VERIFIER_KEEP_RUNS=1 to keep run records in the agent's storage)
 ```
+
+Run the tests with the project environment (`uv run pytest`, or `pytest` inside an activated
+`.venv`). A system `pytest` (e.g. `/usr/bin/pytest`) does not have the project's dependencies.

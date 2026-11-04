@@ -1,5 +1,9 @@
 import xml.etree.ElementTree as ET
 
+from ._deps import require_deps
+
+require_deps()
+
 from agents.eflint_verifier.pnml import PNML_NS, PTNET_TYPE, normalize_pnml, pn_transitions, slug
 
 # What agents/petri_net_generator writes: unnamespaced core model, label names, finalmarkings.

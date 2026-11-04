@@ -1,6 +1,10 @@
 """The agent contract (text / IR / BPMN paths, clarification, failures) and the HTTP service."""
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("pm4py", reason="PM4Py is not installed: install the `petri_net_generator` extra (`uv sync --extra petri_net_generator`)")
+
 from fastapi.testclient import TestClient
 
 from agents.contract import AgentRegistry, AgentRequest

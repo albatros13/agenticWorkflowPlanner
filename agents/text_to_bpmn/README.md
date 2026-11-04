@@ -43,7 +43,8 @@ Other parts of the package:
 | `agent.py` | `TextToBpmnHandler`: runs the pipeline behind the agent contract. It is configured with an LLM `provider` or a `provider_factory` (default: `select_provider` from `shaping.py`). |
 | `shaping.py` | Provider selection and the response `resources` (evidence, IR, terminology, model) shown in the UIs. |
 | `service.py` | Standalone contract service, port 8120 (`TEXT_TO_BPMN_PORT`): `/agent/manifest`, `/agent/invoke_sync`, `/agent/invoke`, `/agent/jobs/{id}`, `/health`. |
-| `demo/` | The original single-shot demo UI, a thin shim over the agent (`POST /api/generate`, `GET /api/health`). It renders the BPMN with bpmn-js on port 8080. |
+| `runs.py` | Reads stored runs back: `list_runs()` and `load_run(run_id)`, which returns the same payload as a fresh generation. |
+| `demo/` | Demo UI on port 8080, a thin shim over the agent. It generates new diagrams (`POST /api/generate`) and shows stored ones (`GET /api/runs`, `GET /api/runs/{run_id}`), rendering the BPMN with bpmn-js. |
 
 The result `output` contains `run_id`, `provider`, `bpmn_xml`, `dmn_xml`, `resources`, and
 `validation` (`bpmn_valid`, `bpmn_errors`, `dmn_valid`, `connectivity_ok`,
@@ -57,6 +58,20 @@ Each run is saved under `storage/runs/<run_id>/` (override with `RUNS_DIR`): `ch
 generated, the coordinator copies the BPMN XML to the shared hand-off area
 (`storage/projects/<project_id>/model.bpmn`) for downstream agents such as the Petri net
 generator.
+
+## Viewing stored diagrams
+
+The demo's **Stored diagrams** panel lists the runs saved in `storage/runs/` (or `RUNS_DIR`) that
+have a BPMN model, newest first. Click one to show it exactly like a fresh result: the diagram,
+validation badges, extracted resources, DMN tables, and the original source text ("Copy to input"
+lets you edit it and generate a new run). `/?run=<run_id>` opens a run directly, and the list
+refreshes after each generation.
+
+No LLM is involved. `runs.py` reads the stored `bpmn.json` / `dmn.json` for the diagram, rebuilds
+the resources from the stored evidence, IR and terminology, rebuilds the process graph from the IR
+(deterministic code), and re-runs the validation. A reloaded run is identical to the agent's
+original response. If a run written by an older pipeline version doesn't match today's models, the
+diagram is still shown, and a warning says which parts could not be read.
 
 ## Running
 
@@ -72,7 +87,7 @@ To use the standalone service from the coordinator, set
 
 ## Tests
 
-`tests/text_to_bpmn/` (60 tests) and `tests/test_coordinator*.py`, all offline with the scripted
+`tests/text_to_bpmn/` (67 tests, including `test_stored_runs.py`) and `tests/test_coordinator*.py`, all offline with the scripted
 provider. The sample guidelines in `tests/text_to_bpmn/fixtures/` cover a smoke case
 (`smoke_bph.md`) and six constructs: sequence, XOR decision, parallel (AND), temporal
 constraints, exception, and ambiguous language.

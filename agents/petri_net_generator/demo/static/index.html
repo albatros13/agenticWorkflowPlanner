@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Petri net viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; color:#94a3b8; font-size:12px; }
+  .wrap { display:grid; grid-template-columns:340px 1fr; gap:16px; padding:16px; align-items:start; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card + .card { margin-top:16px; }
+  .card h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  textarea { width:100%; height:110px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:8px; font:12px/1.4 ui-monospace,Menlo,Consolas,monospace; }
+  select { width:100%; border:1px solid var(--line); border-radius:8px; padding:7px; background:#fff; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  button { border:0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; font-size:13px; }
+  button:disabled { opacity:.45; cursor:default; }
+  .primary { background:var(--accent); color:#fff; }
+  .ghost { background:#eef2ff; color:var(--accent); }
+  .tool { background:#f1f5f9; color:#334155; font-size:12px; padding:5px 10px; }
+  label.file { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:7px 10px; cursor:pointer; color:var(--muted); font-size:13px; }
+  label.file input { display:none; }
+  #nets { list-style:none; margin:0; padding:0; max-height:300px; overflow:auto; }
+  #nets li { padding:7px 8px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+  #nets li:hover { background:#f8fafc; border-color:var(--line); }
+  #nets li.active { background:#eff6ff; border-color:#bfdbfe; }
+  #nets .name { font-weight:600; }
+  #nets .meta { color:var(--muted); font-size:12px; }
+  #right { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .toolbar h3 { margin:0; font-size:15px; }
+  #canvas { height:560px; background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; position:relative; }
+  #canvas svg { width:100%; height:100%; }
+  #canvas .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+  #canvas g.node.fireable { cursor:pointer; }
+  #canvas g.node.fireable:hover polygon, #canvas g.node.fireable:hover path { stroke-width:3; }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; }
+  .badge { padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; background:#e0e7ff; color:#3730a3; }
+  .b-ok { background:#dcfce7; color:var(--ok); } .b-bad { background:#fee2e2; color:var(--bad); }
+  .b-warn { background:#fef3c7; color:var(--warn); } .b-muted { background:#f1f5f9; color:var(--muted); }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { background:#dcfce7; color:#14532d; border:1px solid #86efac; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:600; cursor:pointer; }
+  .chip.silent { background:#111827; color:#fff; border-color:#111827; }
+  ol#trace { margin:0; padding-left:20px; max-height:180px; overflow:auto; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .muted { color:var(--muted); font-size:12.5px; }
+  .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; white-space:pre-wrap; margin-bottom:10px; }
+  .finding { font-size:12.5px; margin:4px 0; } .finding b { font-family:ui-monospace,monospace; font-size:11.5px; }
+  @media(max-width:1000px){ .wrap{ grid-template-columns:1fr; } .grid3{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Petri net viewer</h1>
+  <p>Open a PNML net (saved by the Petri net generator, converted from a text→BPMN run, or your own file) and play the token game: click a green transition to fire it.</p>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="card">
+      <h2>Saved nets</h2>
+      <ul id="nets"><li class="muted">Loading…</li></ul>
+      <div class="row"><button class="tool" id="refresh">Refresh</button><span class="muted" id="runsdir"></span></div>
+    </div>
+    <div class="card">
+      <h2>Convert a text→BPMN run</h2>
+      <select id="bpmnruns"><option value="">Loading…</option></select>
+      <div class="row">
+        <select id="convsource" style="width:auto"><option value="bpmn">from BPMN XML</option><option value="ir">from graph IR</option></select>
+        <button class="ghost" id="convert">Convert</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Open a PNML file</h2>
+      <div class="row" style="margin-top:0"><label class="file">Choose .pnml…<input type="file" id="file" accept=".pnml,.xml,application/xml,text/xml" /></label></div>
+      <textarea id="paste" placeholder="…or paste PNML here"></textarea>
+      <div class="row"><button class="primary" id="show">Show pasted PNML</button></div>
+    </div>
+  </div>
+
+  <div id="right">
+    <div class="card">
+      <div id="error"></div>
+      <div class="toolbar">
+        <div><h3 id="title">No net selected</h3><div class="badges" id="badges"></div></div>
+        <div class="row" style="margin-top:0">
+          <button class="tool" id="undo" disabled>Undo</button>
+          <button class="tool" id="reset" disabled>Reset</button>
+          <button class="tool" id="rankdir" disabled>Top → bottom</button>
+          <button class="tool" id="fit" disabled>Fit</button>
+          <button class="tool" id="dlpnml" disabled>PNML</button>
+          <button class="tool" id="dlsvg" disabled>SVG</button>
+        </div>
+      </div>
+      <div id="canvas"><div class="empty">Select a saved net, convert a run, or open a PNML file.</div></div>
+    </div>
+    <div class="grid3">
+      <div class="card"><h2>Enabled transitions</h2><div class="chips" id="enabled"><span class="muted">—</span></div><p class="muted" id="status"></p></div>
+      <div class="card"><h2>Fired sequence</h2><ol id="trace"></ol><p class="muted" id="notrace">Nothing fired yet.</p></div>
+      <div class="card"><h2>Marking</h2><table id="marking"><tr><td class="muted">—</td></tr></table></div>
+    </div>
+    <div class="card" id="analysis" hidden><h2>Validation</h2><div id="findings"></div></div>
+  </div>
+</div>
+
+<!-- Graphviz compiled to WebAssembly renders the DOT; svg-pan-zoom adds zoom/pan. -->
+<script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3/lib/viz-standalone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state = { source: null, view: null, history: [], rankdir: "LR", name: "", pz: null, svgText: "" };
+let vizPromise = null;
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = res.headers.get("content-type")?.includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(typeof data === "string" ? data : (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)));
+  return data;
+}
+function showError(e) { $("error").innerHTML = e ? `<div class="err">${esc(e.message || e)}</div>` : ""; }
+
+async function renderSvg(dot) {
+  if (window.Viz) {
+    try { vizPromise = vizPromise || Viz.instance(); return (await vizPromise).renderSVGElement(dot); }
+    catch (e) { console.warn("viz.js failed, using server rendering", e); }
+  }
+  const text = await api("/api/svg", {dot});          // fallback: Graphviz on the server
+  return new DOMParser().parseFromString(text, "image/svg+xml").documentElement;
+}
+
+// --- sidebar --------------------------------------------------------------------------------
+async function loadNets() {
+  try {
+    const d = await api("/api/nets");
+    $("runsdir").textContent = d.nets.length ? "" : "none in " + d.runs_dir;
+    $("nets").innerHTML = d.nets.map(n => {
+      const s = n.summary ? `${n.summary.places} places · ${n.summary.transitions} transitions` : "";
+      const sound = n.soundness ? ` · soundness ${n.soundness}` : "";
+      const when = new Date(n.modified * 1000).toLocaleString();
+      return `<li data-ref="${esc(n.ref)}" class="${state.source?.ref === n.ref ? "active" : ""}"><div class="name">${esc(n.name || n.ref)}</div>
+              <div class="meta">${esc(n.ref)} · ${esc(n.input_type)} · ${esc(when)}</div><div class="meta">${esc(s + sound)}</div></li>`;
+    }).join("") || `<li class="muted">No saved nets yet.</li>`;
+    document.querySelectorAll("#nets li[data-ref]").forEach(li => li.onclick = () => open({ref: li.dataset.ref}));
+  } catch (e) { $("nets").innerHTML = `<li class="muted">${esc(e.message)}</li>`; }
+}
+async function loadBpmnRuns() {
+  try {
+    const d = await api("/api/bpmn_runs");
+    $("bpmnruns").innerHTML = d.runs.map(r => `<option value="${esc(r.run_id)}">${esc(r.run_id)} · ${esc(r.process || "untitled")} · ${esc(r.saved_at.replace("T", " "))}</option>`).join("")
+      || `<option value="">No text→BPMN runs</option>`;
+  } catch (e) { $("bpmnruns").innerHTML = `<option value="">${esc(e.message)}</option>`; }
+}
+
+// --- viewer ---------------------------------------------------------------------------------
+async function open(source) {
+  showError(null);
+  try {
+    const view = await api("/api/view", {...source, rankdir: state.rankdir, analyze: true});
+    state.source = source; state.history = []; state.pz = null;
+    state.analysis = {findings: view.findings || [], soundness: view.soundness};
+    await render(view, true);
+    renderAnalysis(view);
+    loadNets();
+  } catch (e) { showError(e); }
+}
+async function fire(tid) {
+  showError(null);
+  try {
+    const prev = state.view;
+    const view = await api("/api/fire", {...state.source, rankdir: state.rankdir, marking: prev.marking, transition: tid});
+    const t = prev.transitions.find(t => t.id === tid);
+    state.history.push({marking: prev.marking, label: t.silent ? `τ (${t.id})` : t.label, silent: t.silent});
+    await render(view, false);
+  } catch (e) { showError(e); }
+}
+async function rerender(marking, fit) {
+  const view = await api("/api/view", {...state.source, rankdir: state.rankdir, marking, analyze: false});
+  await render(view, fit);
+}
+
+async function render(view, fit) {
+  state.view = view;
+  const keep = !fit && state.pz ? {zoom: state.pz.getZoom(), pan: state.pz.getPan()} : null;
+  const svg = await renderSvg(view.dot);
+  state.svgText = new XMLSerializer().serializeToString(svg);
+  const canvas = $("canvas"); canvas.innerHTML = ""; canvas.appendChild(svg);
+  svg.removeAttribute("width"); svg.removeAttribute("height");
+  const byId = Object.fromEntries(view.transitions.map(t => [t.svg_id, t]));
+  svg.querySelectorAll("g.node").forEach(g => {
+    const t = byId[g.id];
+    if (t && t.enabled) { g.classList.add("fireable"); g.addEventListener("click", () => fire(t.id)); }
+  });
+  if (window.svgPanZoom) {
+    state.pz = svgPanZoom(svg, {controlIconsEnabled: true, fit: true, center: true, minZoom: 0.1, maxZoom: 20, dblClickZoomEnabled: false});
+    if (keep) { state.pz.zoom(keep.zoom); state.pz.pan(keep.pan); }
+  }
+  // header + panels
+  $("title").textContent = view.name || state.source.ref || "PNML";
+  const st = {running: ["b-ok", "running"], final: ["b-ok", "final marking reached"], deadlock: ["b-bad", "deadlock"], dead: ["b-warn", "no transition enabled"]}[view.status];
+  const a = state.analysis || {};
+  const sound = a.soundness ? {passed: "b-ok", failed: "b-bad"}[a.soundness.verdict] || "b-muted" : null;
+  $("badges").innerHTML = `<span class="badge ${st[0]}">${st[1]}</span>`
+    + (sound ? `<span class="badge ${sound}" title="${esc(a.soundness.detail)}">soundness ${esc(a.soundness.verdict)}</span>` : "")
+    + `<span class="badge b-muted">${view.summary.places} places · ${view.summary.transitions} transitions (${view.summary.silent_transitions} silent) · ${view.summary.arcs} arcs</span>`
+    + `<span class="badge b-muted">${view.layout === "pnml" ? "layout from PNML" : "automatic layout"}</span>`;
+  $("enabled").innerHTML = view.transitions.filter(t => t.enabled)
+    .map(t => `<span class="chip ${t.silent ? "silent" : ""}" data-t="${esc(t.id)}" title="${esc(t.id)}">${esc(t.silent ? "τ " + t.id : t.label)}</span>`).join("")
+    || `<span class="muted">none</span>`;
+  document.querySelectorAll("#enabled .chip").forEach(c => c.onclick = () => fire(c.dataset.t));
+  $("status").textContent = {final: "The net reached its final marking.", deadlock: "Deadlock: no transition is enabled and the final marking is not reached.",
+    dead: "No transition is enabled (the PNML defines no final marking).", running: ""}[view.status];
+  $("trace").innerHTML = state.history.map(h => `<li${h.silent ? ' class="muted"' : ""}>${esc(h.label)}</li>`).join("");
+  $("notrace").hidden = state.history.length > 0;
+  const placeById = Object.fromEntries(view.places.map(p => [p.id, p]));
+  const rows = Object.entries(view.marking).map(([id, n]) => `<tr><td>${esc(placeById[id]?.label || id)}</td><td>${n}</td></tr>`).join("");
+  $("marking").innerHTML = `<tr><th>Place</th><th>Tokens</th></tr>` + (rows || `<tr><td class="muted" colspan="2">empty marking</td></tr>`)
+    + (Object.keys(view.final_marking).length ? `<tr><td class="muted" colspan="2">final${view.final_marking_source === "inferred" ? " (inferred: the PNML declares none)" : ""}: ${esc(Object.entries(view.final_marking).map(([p, n]) => `${placeById[p]?.label || p}=${n}`).join(", "))}</td></tr>` : "");
+  ["undo"].forEach(b => $(b).disabled = !state.history.length);
+  ["reset", "rankdir", "fit", "dlpnml", "dlsvg"].forEach(b => $(b).disabled = false);
+  $("rankdir").disabled = view.layout === "pnml";
+  $("rankdir").textContent = state.rankdir === "LR" ? "Top → bottom" : "Left → right";
+}
+function renderAnalysis(view) {
+  const f = state.analysis.findings;
+  $("analysis").hidden = false;
+  $("findings").innerHTML = (view.soundness ? `<p class="finding"><b>soundness</b> ${esc(view.soundness.verdict)}${view.soundness.detail ? " — " + esc(view.soundness.detail) : ""}</p>` : "")
+    + (f.length ? f.map(x => `<p class="finding"><span class="badge ${x.severity === "error" ? "b-bad" : x.severity === "warning" ? "b-warn" : "b-muted"}">${esc(x.severity)}</span> <b>${esc(x.code)}</b> ${esc(x.message)}</p>`).join("")
+                : `<p class="muted">No structural findings.</p>`);
+}
+
+function download(name, text, type) {
+  const a = Object.assign(document.createElement("a"), {href: URL.createObjectURL(new Blob([text], {type})), download: name});
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// --- wiring ---------------------------------------------------------------------------------
+$("refresh").onclick = () => { loadNets(); loadBpmnRuns(); };
+$("show").onclick = () => $("paste").value.trim() ? open({pnml: $("paste").value}) : showError("Paste a PNML document first.");
+$("file").onchange = async e => { const f = e.target.files[0]; if (f) { $("paste").value = await f.text(); open({pnml: $("paste").value}); } e.target.value = ""; };
+$("convert").onclick = async () => {
+  const run = $("bpmnruns").value; if (!run) return;
+  showError(null); $("convert").disabled = true;
+  try { const r = await api("/api/convert", {run_id: run, source: $("convsource").value}); await loadNets(); await open({ref: r.ref}); }
+  catch (e) { showError(e); } finally { $("convert").disabled = false; }
+};
+$("undo").onclick = () => { const h = state.history.pop(); if (h) rerender(h.marking, false).catch(showError); };
+$("reset").onclick = () => { state.history = []; rerender(null, false).catch(showError); };
+$("rankdir").onclick = () => { state.rankdir = state.rankdir === "LR" ? "TB" : "LR"; rerender(state.view.marking, true).catch(showError); };
+$("fit").onclick = () => { if (state.pz) { state.pz.resize(); state.pz.fit(); state.pz.center(); } };
+$("dlsvg").onclick = () => download(`${state.source.ref || "net"}.svg`, state.svgText, "image/svg+xml");
+$("dlpnml").onclick = async () => {
+  if (state.source.pnml) return download("net.pnml", state.source.pnml, "application/xml");
+  download(`${state.source.ref}.pnml`, await api(`/api/nets/${encodeURIComponent(state.source.ref)}/pnml`), "application/xml");
+};
+loadNets(); loadBpmnRuns();
+const preset = new URLSearchParams(location.search).get("ref");   // deep link: /?ref=<pnml_ref>
+if (preset) open({ref: preset});
+</script>
+</body>
+</html>

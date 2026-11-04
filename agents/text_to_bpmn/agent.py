@@ -6,20 +6,18 @@ pipeline code in ``src/`` is not modified.
 """
 from __future__ import annotations
 
-import os
 import uuid
-from pathlib import Path
 from typing import Callable
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
-from agents.storage import agent_storage
 
 from .pipeline.config import Settings
 from .pipeline.llm.base import LLMError, LLMProvider
 from .pipeline.pipeline.artifacts import ArtifactStore
 from .pipeline.pipeline.runner import Pipeline
 from .pipeline.validation.schema import check_connectivity, validate_bpmn, validate_dmn
+from .runs import runs_dir as default_runs_dir
 from .shaping import build_resources, select_provider
 
 ENGINEER_PROCESS = "engineer_process"
@@ -102,7 +100,7 @@ class TextToBpmnHandler(AgentHandler):
 
         run_id = uuid.uuid4().hex[:12]
         # Private per-agent output storage (config/storage.json); RUNS_DIR overrides for tests/ops.
-        runs_dir = Path(os.environ["RUNS_DIR"]) if os.getenv("RUNS_DIR") else agent_storage("text_to_bpmn").path("runs")
+        runs_dir = default_runs_dir()
         store = ArtifactStore.new_run(runs_dir, run_id)
         pipe = Pipeline(provider, store=store, settings=settings)
 

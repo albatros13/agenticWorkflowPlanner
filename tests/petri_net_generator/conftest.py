@@ -1,12 +1,12 @@
-"""Shared setup for the Petri net generator tests. Skips the package when PM4Py is absent."""
+"""Shared setup for the Petri net generator tests.
+
+The worker needs PM4Py (the `petri_net` extra). Each test module calls
+``pytest.importorskip("pm4py", ...)`` so a missing PM4Py shows up as a *reported* skip with its
+reason, rather than silently collecting nothing.
+"""
 from __future__ import annotations
 
-import importlib.util
-
 import pytest
-
-if importlib.util.find_spec("pm4py") is None:  # needs the `petri_net` extra
-    collect_ignore_glob = ["test_*.py"]
 
 
 @pytest.fixture(autouse=True)
