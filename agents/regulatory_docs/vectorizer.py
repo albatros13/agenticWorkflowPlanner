@@ -43,6 +43,7 @@ def vectorize_document(
     profile_name: str,
     embedder: Embedder,
     store: VectorStore,
+    title: str | None = None,
 ) -> VectorizationResult:
     chunks = SemanticChunker(max_chars=profile.chunking.max_chars).chunk(document)
     if not chunks:
@@ -67,6 +68,7 @@ def vectorize_document(
             "vector": vector,
             "payload": {
                 "doc_id": document.id,
+                "title": title or document.source_document,
                 "chunk_id": chunk.id,
                 "source_document": document.source_document,
                 "section": chunk.section,

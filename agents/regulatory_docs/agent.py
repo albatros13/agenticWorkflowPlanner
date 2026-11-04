@@ -5,7 +5,11 @@ Serves three intents behind the shared agent contract:
 * ``upload_document``   — register a regulatory document (raw text or a file path) in the library;
 * ``find_documents``    — list/search the library and surface vectorization options from config;
 * ``vectorize_document``— chunk + embed a *selected* document and upsert it into a Qdrant cluster,
-  using a vectorization profile from ``config/vectorization.json``.
+  using a vectorization profile from ``config/vectorization.json``;
+* ``list_vectorized``   — list the documents actually stored in the profiles' Qdrant collections
+  (Qdrant is the source of truth, so this includes documents absent from the local library);
+* ``search_vectors``    — semantic search: embed a query with a profile's model and return the
+  nearest chunks from that profile's collection.
 
 Embedding/Qdrant wiring is injected (``embedder_factory`` / ``store_factory``) so the agent is
 testable with a deterministic embedder and an in-memory store, and so provider/cluster choices
@@ -31,6 +35,9 @@ AGENT_NAME = "regulatory_docs"
 UPLOAD_DOCUMENT = "upload_document"
 FIND_DOCUMENTS = "find_documents"
 VECTORIZE_DOCUMENT = "vectorize_document"
+LIST_VECTORIZED = "list_vectorized"
+SEARCH_VECTORS = "search_vectors"
+INTENTS = (UPLOAD_DOCUMENT, FIND_DOCUMENTS, VECTORIZE_DOCUMENT, LIST_VECTORIZED, SEARCH_VECTORS)
 
 EmbedderFactory = Callable[[EmbeddingConfig], Embedder]
 StoreFactory = Callable[[QdrantConfig], VectorStore]
@@ -92,6 +99,27 @@ class RegulatoryDocsHandler(AgentHandler):
                         "required": ["doc_id"],
                     },
                 ),
+                Capability(
+                    intent=LIST_VECTORIZED,
+                    description="List documents stored in Qdrant, per profile collection.",
+                    input_schema={
+                        "type": "object",
+                        "properties": {"profile": {"type": "string"}},
+                    },
+                ),
+                Capability(
+                    intent=SEARCH_VECTORS,
+                    description="Semantic search over a profile's Qdrant collection.",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "profile": {"type": "string"},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                        },
+                        "required": ["query"],
+                    },
+                ),
             ],
         )
 
@@ -103,12 +131,16 @@ class RegulatoryDocsHandler(AgentHandler):
                 return self._find(request)
             if request.intent == VECTORIZE_DOCUMENT:
                 return self._vectorize(request)
+            if request.intent == LIST_VECTORIZED:
+                return self._list_vectorized(request)
+            if request.intent == SEARCH_VECTORS:
+                return self._search(request)
         except Exception as exc:  # surface library/embedding/Qdrant failures uniformly
             return self._fail(request.intent, f"{type(exc).__name__}: {exc}")
         return self._fail(
             request.intent,
             f"Unsupported intent {request.intent!r}; this agent serves "
-            f"{UPLOAD_DOCUMENT!r}, {FIND_DOCUMENTS!r}, {VECTORIZE_DOCUMENT!r}.",
+            + ", ".join(repr(i) for i in INTENTS) + ".",
         )
 
     # ---- intents -------------------------------------------------------------
@@ -117,7 +149,7 @@ class RegulatoryDocsHandler(AgentHandler):
         text = payload.get("text")
         path = payload.get("path")
         if path:
-            record = self._lib().add_from_path(path)
+            record = self._lib().add_from_path(path, name=payload.get("title"))
         elif text and text.strip():
             record = self._lib().add_from_text(
                 text,
@@ -160,7 +192,12 @@ class RegulatoryDocsHandler(AgentHandler):
         embedder = self._embedder_factory(profile.embedding)
         store = self._store_factory(profile.qdrant)
         result = vectorize_document(
-            document, profile, profile_name=profile_name, embedder=embedder, store=store
+            document,
+            profile,
+            profile_name=profile_name,
+            embedder=embedder,
+            store=store,
+            title=library.get(doc_id).title,
         )
         record = library.record_vectorization(
             doc_id,
@@ -179,6 +216,77 @@ class RegulatoryDocsHandler(AgentHandler):
             status=JobStatus.succeeded,
             output={"vectorization": result.model_dump(), "document": record.model_dump()},
             artifacts_ref=doc_id,
+        )
+
+    def _list_vectorized(self, request: AgentRequest) -> AgentResult:
+        """Documents per (cluster, collection) of the selected profile(s), read from Qdrant.
+
+        Each target is queried independently so one unreachable cluster reports an error for its
+        own collection instead of failing the whole listing.
+        """
+        cfg = self._cfg()
+        requested = request.payload.get("profile")
+        names = [requested] if requested else cfg.profile_names()
+        library_ids = {r.doc_id for r in self._lib().find()}
+
+        targets: dict[tuple[str, str], dict] = {}
+        for name in names:
+            profile = cfg.profile(name)
+            key = (profile.qdrant.cluster, profile.qdrant.collection)
+            if key in targets:
+                targets[key]["profiles"].append(name)
+                continue
+            target = {
+                "cluster": key[0],
+                "collection": key[1],
+                "profiles": [name],
+                "documents": [],
+                "error": None,
+            }
+            try:
+                docs = self._store_factory(profile.qdrant).list_documents()
+                target["documents"] = [
+                    {**d, "in_library": d["doc_id"] in library_ids} for d in docs
+                ]
+            except Exception as exc:  # noqa: BLE001 - surface per-collection failures
+                target["error"] = f"{type(exc).__name__}: {exc}"
+            targets[key] = target
+
+        collections = list(targets.values())
+        return AgentResult(
+            agent=AGENT_NAME,
+            intent=request.intent,
+            status=JobStatus.succeeded,
+            output={
+                "collections": collections,
+                "count": sum(len(c["documents"]) for c in collections),
+            },
+        )
+
+    def _search(self, request: AgentRequest) -> AgentResult:
+        query = (request.payload.get("query") or "").strip()
+        if not query:
+            return self._fail(request.intent, "payload.query is required.")
+        profile_name = request.payload.get("profile") or self._cfg().default_profile
+        profile = self._cfg().profile(profile_name)
+        limit = max(1, min(int(request.payload.get("limit") or 5), 50))
+
+        vector = self._embedder_factory(profile.embedding)([query])[0]
+        hits = self._store_factory(profile.qdrant).search(vector, limit)
+        library_ids = {r.doc_id for r in self._lib().find()}
+        for hit in hits:
+            hit["in_library"] = hit.get("doc_id") in library_ids
+        return AgentResult(
+            agent=AGENT_NAME,
+            intent=request.intent,
+            status=JobStatus.succeeded,
+            output={
+                "query": query,
+                "profile": profile_name,
+                "cluster": profile.qdrant.cluster,
+                "collection": profile.qdrant.collection,
+                "hits": hits,
+            },
         )
 
     # ---- helpers -------------------------------------------------------------

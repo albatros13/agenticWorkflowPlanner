@@ -7,6 +7,8 @@ Thin HTTP shim over :class:`~agents.regulatory_docs.agent.RegulatoryDocsHandler`
 * ``GET  /api/documents``   — list/search uploaded documents (``?query=``)
 * ``GET  /api/profiles``    — vectorization options from ``config/vectorization.json``
 * ``POST /api/vectorize``   — vectorize a selected document (``{doc_id, profile}``)
+* ``GET  /api/vectorized``  — documents actually stored in Qdrant, per collection (``?profile=``)
+* ``POST /api/search``      — semantic search over a profile's collection (``{query, profile, limit}``)
 
 The static frontend at ``/`` lets you paste/upload, pick a document, choose a profile, and push
 it to Qdrant. Mirrors the text->BPMN / text->eFLINT demos. New clients should talk to the
@@ -25,6 +27,8 @@ from pydantic import BaseModel, Field
 from agents.contract import AgentRequest
 from agents.regulatory_docs.agent import (
     FIND_DOCUMENTS,
+    LIST_VECTORIZED,
+    SEARCH_VECTORS,
     UPLOAD_DOCUMENT,
     VECTORIZE_DOCUMENT,
     RegulatoryDocsHandler,
@@ -57,6 +61,12 @@ class VectorizeRequest(BaseModel):
     profile: str = ""
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1)
+    profile: str = ""
+    limit: int = Field(default=5, ge=1, le=50)
+
+
 @app.post("/api/upload")
 def upload(req: UploadRequest) -> dict:
     return _run(UPLOAD_DOCUMENT, {"text": req.text, "title": req.title or None})
@@ -69,7 +79,7 @@ def upload_file(file: UploadFile = File(...)) -> dict:
         tmp.write(file.file.read())
         tmp_path = tmp.name
     try:
-        return _run(UPLOAD_DOCUMENT, {"path": tmp_path})
+        return _run(UPLOAD_DOCUMENT, {"path": tmp_path, "title": file.filename or None})
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
@@ -87,6 +97,18 @@ def profiles() -> dict:
 @app.post("/api/vectorize")
 def vectorize(req: VectorizeRequest) -> dict:
     return _run(VECTORIZE_DOCUMENT, {"doc_id": req.doc_id, "profile": req.profile or None})
+
+
+@app.get("/api/vectorized")
+def vectorized(profile: str = "") -> dict:
+    return _run(LIST_VECTORIZED, {"profile": profile or None})
+
+
+@app.post("/api/search")
+def search(req: SearchRequest) -> dict:
+    return _run(
+        SEARCH_VECTORS, {"query": req.query, "profile": req.profile or None, "limit": req.limit}
+    )
 
 
 @app.get("/api/health")

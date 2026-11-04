@@ -66,7 +66,9 @@ class DocumentLibrary:
         document = MarkdownLoader().load_text(text, source_document=source, doc_id=doc_id)
         return self._store(document, kind="text", title=title or source)
 
-    def add_from_path(self, path: str | Path) -> DocumentRecord:
+    def add_from_path(self, path: str | Path, *, name: str | None = None) -> DocumentRecord:
+        """Register a file. ``name`` is the user-facing file name (title + source) — needed when
+        ``path`` is a temporary copy of an upload whose real name would otherwise be lost."""
         path = Path(path)
         if not path.is_file():
             raise FileNotFoundError(f"No such file: {path}")
@@ -78,8 +80,10 @@ class DocumentLibrary:
         document.id = doc_id  # normalize to the content hash for idempotent storage
         for block in document.blocks:
             block.id = block.id.replace(path.stem, doc_id, 1)
+        if name:
+            document.source_document = name
         kind = "pdf" if path.suffix.lower() == ".pdf" else "markdown"
-        return self._store(document, kind=kind, title=path.name)
+        return self._store(document, kind=kind, title=name or path.name)
 
     # ---- find / read ---------------------------------------------------------
     def find(self, query: str | None = None) -> list[DocumentRecord]:

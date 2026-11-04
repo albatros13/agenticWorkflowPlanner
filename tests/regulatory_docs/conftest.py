@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from agents.regulatory_docs.embeddings import Embedder, build_embedder
 from agents.regulatory_docs.config import EmbeddingConfig, QdrantConfig
+from agents.regulatory_docs.qdrant_store import summarize_documents
 
 
 class InMemoryStore:
@@ -28,6 +29,16 @@ class InMemoryStore:
 
     def count(self) -> int:
         return len(self.points)
+
+    def list_documents(self) -> list[dict]:
+        return summarize_documents(p["payload"] for p in self.points.values())
+
+    def search(self, vector: list[float], limit: int = 5) -> list[dict]:
+        def dot(p):
+            return sum(a * b for a, b in zip(vector, p["vector"]))
+
+        ranked = sorted(self.points.values(), key=dot, reverse=True)[:limit]
+        return [{"score": dot(p), **p["payload"]} for p in ranked]
 
 
 def offline_embedder_factory(cfg: EmbeddingConfig) -> Embedder:

@@ -47,6 +47,36 @@ class VectorStore(Protocol):
 
     def count(self) -> int: ...
 
+    def list_documents(self) -> list[dict[str, Any]]: ...
+
+    def search(self, vector: list[float], limit: int) -> list[dict[str, Any]]: ...
+
+
+# Payload fields needed to summarise a collection per document (no text/vectors transferred).
+_DOC_FIELDS = ["doc_id", "title", "source_document"]
+_SCROLL_PAGE = 256
+
+
+def summarize_documents(payloads: Any) -> list[dict[str, Any]]:
+    """Group chunk payloads by ``doc_id`` into ``{doc_id, title, source_document, chunks}``."""
+    docs: dict[str, dict[str, Any]] = {}
+    for payload in payloads:
+        payload = payload or {}
+        doc_id = payload.get("doc_id")
+        if not doc_id:
+            continue
+        entry = docs.setdefault(
+            doc_id,
+            {
+                "doc_id": doc_id,
+                "title": payload.get("title") or payload.get("source_document") or doc_id,
+                "source_document": payload.get("source_document") or "",
+                "chunks": 0,
+            },
+        )
+        entry["chunks"] += 1
+    return sorted(docs.values(), key=lambda d: d["title"].lower())
+
 
 class QdrantDocumentStore:
     """Concrete :class:`VectorStore` backed by a live Qdrant client."""
@@ -78,6 +108,37 @@ class QdrantDocumentStore:
 
     def count(self) -> int:
         return int(self._client.count(self._collection, exact=True).count)
+
+    def list_documents(self) -> list[dict[str, Any]]:
+        """Distinct documents stored in the collection (empty if it does not exist yet)."""
+        if not self._client.collection_exists(self._collection):
+            return []
+
+        def payloads():
+            offset = None
+            while True:
+                points, offset = self._client.scroll(
+                    self._collection,
+                    limit=_SCROLL_PAGE,
+                    offset=offset,
+                    with_payload=_DOC_FIELDS,
+                    with_vectors=False,
+                )
+                for point in points:
+                    yield point.payload
+                if offset is None:
+                    break
+
+        return summarize_documents(payloads())
+
+    def search(self, vector: list[float], limit: int = 5) -> list[dict[str, Any]]:
+        """Nearest chunks to ``vector``: ``[{score, **payload}]`` (empty if no collection)."""
+        if not self._client.collection_exists(self._collection):
+            return []
+        hits = self._client.query_points(
+            self._collection, query=vector, limit=limit, with_payload=True
+        ).points
+        return [{"score": float(h.score), **(h.payload or {})} for h in hits]
 
 
 def build_qdrant_client(cfg: QdrantConfig) -> Any:

@@ -29,13 +29,23 @@
   .doc .t { font-weight:600; }
   .doc .m { color:var(--muted); font-size:12px; }
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#dcfce7; color:var(--ok); margin-left:6px; }
+  .badge.lib { background:#e0e7ff; color:var(--accent); }
+  .badge.nolib { background:#fef3c7; color:#92400e; }
+  .coll { margin-bottom:12px; }
+  .coll .h { font-weight:600; font-size:13px; margin-bottom:6px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .hit { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:8px; }
+  .hit .s { float:right; font-weight:600; color:var(--accent); }
+  .hit .x { white-space:pre-wrap; font-size:12px; margin-top:6px; max-height:160px; overflow:auto; }
   pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; overflow:auto; font-size:12px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Regulatory documents</h1>
-  <p>Upload or find a document, then vectorize a selected one into a Qdrant cluster. Vectorization options come from <code>config/vectorization.json</code>.</p>
+  <p>Upload or find a document, vectorize a selected one into a Qdrant cluster, and search what is stored there. Vectorization options come from <code>config/vectorization.json</code>.</p>
 </header>
 
 <div class="wrap">
@@ -52,11 +62,22 @@
     </div>
 
     <div class="card">
-      <h2>Find</h2>
+      <h2>Find in library</h2>
       <div class="row">
-        <input type="text" id="query" placeholder="Search title / source / text…" />
-        <button class="ghost" id="btnFind">Search</button>
+        <input type="text" id="query" placeholder="Match title / source / text of uploaded documents…" />
+        <button class="ghost" id="btnFind">Find</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Semantic search (Qdrant)</h2>
+      <input type="text" id="sQuery" placeholder="Ask about the vectorized documents…" />
+      <div class="row">
+        <select id="sProfile" style="flex:1"></select>
+        <input type="number" id="sLimit" value="5" min="1" max="50" style="width:64px;border:1px solid var(--line);border-radius:8px;padding:8px" />
+        <button class="primary" id="btnSearch">Search</button>
+      </div>
+      <p class="muted">Embeds the query with the profile's model and searches its collection — covers every vectorized document, including ones not in the local library.</p>
     </div>
   </div>
 
@@ -75,6 +96,11 @@
       <p class="muted" id="selInfo">Select a document above.</p>
     </div>
 
+    <div class="card">
+      <h2>Vectorized documents (in Qdrant) <button class="ghost" id="btnVecList" style="float:right;padding:4px 10px">Refresh</button></h2>
+      <div id="vecList"><p class="muted">Loading…</p></div>
+    </div>
+
     <div id="result"></div>
   </div>
 </div>
@@ -90,18 +116,56 @@ async function api(path, opts) {
   return data;
 }
 
-function showErr(e) { $("result").innerHTML = `<div class="err">${e.message || e}</div>`; }
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function showErr(e) { $("result").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
 
 function renderProfiles(profiles) {
-  const sel = $("profile");
-  sel.innerHTML = "";
-  for (const p of profiles) {
-    const opt = document.createElement("option");
-    opt.value = p.name;
-    opt.textContent = `${p.name} — ${p.provider}/${p.model} (${p.dimension}d) → ${p.cluster}/${p.collection}`;
-    if (p.is_default) opt.selected = true;
-    sel.appendChild(opt);
+  for (const id of ["profile", "sProfile"]) {
+    const sel = $(id);
+    const keep = sel.value;
+    sel.innerHTML = "";
+    for (const p of profiles) {
+      const opt = document.createElement("option");
+      opt.value = p.name;
+      opt.textContent = `${p.name} — ${p.provider}/${p.model} (${p.dimension}d) → ${p.cluster}/${p.collection}`;
+      opt.selected = keep ? p.name === keep : p.is_default;
+      sel.appendChild(opt);
+    }
   }
+}
+
+function renderVectorized(data) {
+  const box = $("vecList");
+  const colls = data.collections || [];
+  if (!colls.length) { box.innerHTML = '<p class="muted">No profiles configured.</p>'; return; }
+  box.innerHTML = colls.map(c => {
+    const head = `<div class="h">${esc(c.cluster)}/${esc(c.collection)} <span class="muted">· profiles: ${esc(c.profiles.join(", "))} · ${c.documents.length} doc(s)</span></div>`;
+    if (c.error) return `<div class="coll">${head}<div class="err">${esc(c.error)}</div></div>`;
+    if (!c.documents.length) return `<div class="coll">${head}<p class="muted">No documents.</p></div>`;
+    const rows = c.documents.map(d => `<tr><td>${esc(d.title)}<br><span class="muted">${esc(d.source_document)}</span></td>
+      <td>${esc(d.doc_id)}</td><td>${d.chunks}</td>
+      <td>${d.in_library ? '<span class="badge lib">in library</span>' : '<span class="badge nolib">Qdrant only</span>'}</td></tr>`).join("");
+    return `<div class="coll">${head}<table><tr><th>Title / source</th><th>doc_id</th><th>Chunks</th><th></th></tr>${rows}</table></div>`;
+  }).join("");
+}
+
+async function refreshVectorized() {
+  $("vecList").innerHTML = '<p class="muted">Loading…</p>';
+  try { renderVectorized(await api("/api/vectorized")); }
+  catch (e) { $("vecList").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
+}
+
+function renderHits(data) {
+  const hits = data.hits || [];
+  const head = `<h2>Search: “${esc(data.query)}” → ${esc(data.cluster)}/${esc(data.collection)} (${esc(data.profile)})</h2>`;
+  const body = hits.length ? hits.map(h => `<div class="hit"><span class="s">${h.score.toFixed(3)}</span>
+      <div class="t"><b>${esc(h.title || h.source_document || h.doc_id)}</b>
+        ${h.in_library ? '<span class="badge lib">in library</span>' : '<span class="badge nolib">Qdrant only</span>'}</div>
+      <div class="m muted">${esc(h.doc_id)}${h.section ? " · " + esc(h.section) : ""}${h.line_start ? ` · lines ${h.line_start}–${h.line_end}` : ""}</div>
+      <div class="x">${esc(h.text)}</div></div>`).join("")
+    : '<p class="muted">No results — is anything vectorized with this profile?</p>';
+  $("result").innerHTML = `<div class="card">${head}${body}</div>`;
 }
 
 function renderDocs(docs) {
@@ -111,9 +175,9 @@ function renderDocs(docs) {
   for (const d of docs) {
     const el = document.createElement("div");
     el.className = "doc" + (selected === d.doc_id ? " sel" : "");
-    el.innerHTML = `<div class="t">${d.title}${d.vectorized ? '<span class="badge">vectorized</span>' : ''}</div>
-      <div class="m">${d.doc_id} · ${d.kind} · ${d.n_blocks} blocks · ${d.n_chars} chars</div>
-      <div class="m">${(d.preview || "").slice(0, 160)}</div>`;
+    el.innerHTML = `<div class="t">${esc(d.title)}${d.vectorized ? '<span class="badge">vectorized</span>' : ''}</div>
+      <div class="m">${esc(d.doc_id)} · ${esc(d.kind)} · ${d.n_blocks} blocks · ${d.n_chars} chars</div>
+      <div class="m">${esc((d.preview || "").slice(0, 160))}</div>`;
     el.onclick = () => select(d);
     box.appendChild(el);
   }
@@ -168,11 +232,31 @@ $("btnVec").onclick = async () => {
     });
     $("result").innerHTML = `<div class="card"><h2>Vectorization result</h2><pre>${JSON.stringify(data.vectorization, null, 2)}</pre></div>`;
     await refresh($("query").value);
+    await refreshVectorized();
   } catch (e) { showErr(e); }
   finally { $("btnVec").disabled = false; }
 };
 
+$("btnVecList").onclick = () => refreshVectorized();
+
+async function semanticSearch() {
+  const query = $("sQuery").value.trim();
+  if (!query) return;
+  $("btnSearch").disabled = true;
+  try {
+    renderHits(await api("/api/search", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, profile: $("sProfile").value, limit: Number($("sLimit").value) || 5 }),
+    }));
+  } catch (e) { showErr(e); }
+  finally { $("btnSearch").disabled = false; }
+}
+$("btnSearch").onclick = semanticSearch;
+$("sQuery").onkeydown = (ev) => { if (ev.key === "Enter") semanticSearch(); };
+$("query").onkeydown = (ev) => { if (ev.key === "Enter") refresh($("query").value).catch(showErr); };
+
 refresh("").catch(() => {});
+refreshVectorized();
 </script>
 </body>
 </html>

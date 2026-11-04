@@ -67,15 +67,20 @@ or over HTTP, and it has a standalone demo app.
   Swapping a model or collection is a config edit, not a code change.
 
 ### 6. Agent handler (`agent.py`)
-- `RegulatoryDocsHandler` serves three intents behind the contract:
+- `RegulatoryDocsHandler` serves five intents behind the contract:
   - **`upload_document`** — register from raw `text` or a file `path`; returns the record +
     vectorization options.
   - **`find_documents`** — list/search the library; returns documents + options.
   - **`vectorize_document`** — vectorize a selected `doc_id` using a config `profile`.
+  - **`list_vectorized`** — list documents actually stored in each profile's Qdrant collection
+    (Qdrant is the source of truth, so documents missing from the local library are included;
+    each is flagged `in_library`). Per-collection errors are reported, not fatal.
+  - **`search_vectors`** — semantic search: embed `query` with the profile's model and return the
+    nearest chunks (score + provenance payload) from its collection.
 - Embedding/Qdrant wiring is **injected** (`embedder_factory` / `store_factory`) so the agent is
   testable with a deterministic embedder + in-memory store, and provider/cluster choices live in
   config. All errors surface uniformly as a failed `AgentResult`.
-- Registered in `config/agents.json` so `AgentRegistry` maps the three intents to this agent.
+- Registered in `config/agents.json` so `AgentRegistry` maps the five intents to this agent.
 
 ### 7. Demo app (`demo/main.py` + `demo/static/index.html`)
 - FastAPI shim over the handler: `POST /api/upload`, `POST /api/upload_file` (markdown/txt/PDF),
