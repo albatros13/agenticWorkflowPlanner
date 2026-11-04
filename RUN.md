@@ -19,6 +19,7 @@ uv run uvicorn agents.regulatory_docs.demo.main:app  --port 8110   # regulatory 
 uv run uvicorn agents.petri_net_generator.service:app --port 8200   # text / BPMN -> Petri net (PNML)
 uv run uvicorn agents.petri_net_generator.demo.main:app --port 8210  # Petri net viewer (token game)
 uv run uvicorn agents.eflint_verifier.service:app    --port 8300   # Petri net vs eFLINT verification (needs the external service, below)
+uv run uvicorn agents.eflint_verifier.demo.main:app  --port 8310   # verifier UI: upload inputs, verify, browse runs
 ```
 
 You can also install a single agent's deps into the shared env with its extra, e.g.

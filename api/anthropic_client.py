@@ -50,6 +50,13 @@ def ask_anthropic_structured(*, task, system, prompt, schema, max_tokens=4096, m
         messages=[{"role": "user", "content": prompt}],
         timeout=120,
     )
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        # The tool input is cut off mid-JSON; returning it would surface later as a confusing
+        # schema-validation error (missing required fields), so fail with the real cause.
+        raise RuntimeError(
+            f"Anthropic output was truncated at max_tokens={max_tokens} before the structured "
+            f"result for task '{task}' was complete; shorten the input or raise max_tokens"
+        )
     for block in response.content:
         if getattr(block, "type", None) == "tool_use":
             return block.input, json.dumps(block.input), model

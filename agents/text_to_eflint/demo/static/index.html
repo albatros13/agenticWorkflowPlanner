@@ -30,6 +30,13 @@
   .primary:disabled { opacity:.5; cursor:default; }
   .ghost { background:#eef2ff; color:var(--accent); }
   label.file { background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--muted); }
+  #left { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .runs { max-height:360px; overflow:auto; }
+  .run { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
+  .run:hover { border-color:#bfdbfe; }
+  .run.sel { border-color:var(--accent); box-shadow:0 0 0 2px #dbeafe; }
+  .run .t { font-weight:600; font-size:13px; }
+  .run .m { color:var(--muted); font-size:11.5px; }
   #right { display:flex; flex-direction:column; gap:16px; min-width:0; }
   .badges { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
@@ -95,6 +102,7 @@
 </header>
 
 <div class="wrap">
+  <div id="left">
   <!-- INPUT -->
   <div class="card">
     <h2>Input</h2>
@@ -123,6 +131,14 @@
     <h2 style="margin-top:16px">Legend</h2>
     <div class="legend" id="legend"></div>
     <p class="muted" style="font-size:11.5px;margin:8px 0 0">Click a role to dim it. Words in <b>subordinate clauses</b> and anything uncategorised are tagged <i>other</i>.</p>
+  </div>
+
+  <!-- STORED RUNS -->
+  <div class="card">
+    <h2>Stored eFLINT runs <button class="ghost" id="runsRefresh" type="button" style="float:right;padding:3px 10px;font-size:12px">Refresh</button></h2>
+    <div class="runs" id="runs"><p class="muted">Loading…</p></div>
+    <p class="muted" style="font-size:11.5px;margin:8px 0 0">Generations saved in the agent's storage. Click one to open its findings, scenarios and files (and restore its input text when it was saved).</p>
+  </div>
   </div>
 
   <!-- RESULTS -->
@@ -221,6 +237,8 @@ async function generate() {
     if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
     renderEflint(data);
     $('#status').textContent = `Done · ${data.provider} · run ${data.run_id}`;
+    selectedRun = data.run_id;
+    loadRuns();
   } catch (err) {
     $('#out').innerHTML = `<div class="err">Generation failed:\n${esc(err.message)}</div>`;
     $('#status').textContent = 'Failed.';
@@ -250,12 +268,60 @@ function renderEflint(data) {
   const names = Object.keys(data.files);
   $('#framesCard').innerHTML = `<div class="card"><h2>eFLINT files</h2><div class="tabs" id="tabs">${
     names.map((n, i) => `<button type="button" data-f="${esc(n)}" class="${i===0?'on':''}">${esc(n)}</button>`).join('')}</div>
-    <pre class="json" id="file">${esc(data.files[names[0]])}</pre></div>`;
+    <pre class="json" id="eflintFile">${names.length ? esc(data.files[names[0]]) : ''}</pre></div>`;
   document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('#tabs button').forEach(x => x.classList.remove('on')); b.classList.add('on');
-    $('#file').textContent = data.files[b.dataset.f];
+    $('#eflintFile').textContent = data.files[b.dataset.f];
   });
 }
+
+let selectedRun = null;
+
+async function loadRuns() {
+  try {
+    const res = await fetch('/api/runs');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    if (!data.runs.length) { $('#runs').innerHTML = '<p class="muted">No stored runs yet — generate one.</p>'; return; }
+    $('#runs').innerHTML = data.runs.map(r => {
+      const s = r.summary || {};
+      const ok = r.status === 'succeeded';
+      return `<div class="run ${r.run_id===selectedRun?'sel':''}" data-id="${esc(r.run_id)}">
+        <div class="t">${esc(r.title)}</div>
+        <div class="m"><span class="${ok?'pass':'fail'}">${ok?'✓ valid':'needs review'}</span> · ${s.scenarios_passed ?? '?'}/${s.scenarios_total ?? '?'} scenarios
+          · ${esc((r.created_at||'').replace('T',' ').slice(0,16))}${r.language ? ' · '+esc(r.language.toUpperCase()) : ''} · ${esc(r.run_id)}</div>
+      </div>`;
+    }).join('');
+    document.querySelectorAll('#runs .run').forEach(el => el.onclick = () => openRun(el.dataset.id));
+  } catch (err) {
+    $('#runs').innerHTML = `<div class="err">Could not list runs:\n${esc(err.message)}</div>`;
+  }
+}
+
+async function openRun(id) {
+  $('#status').innerHTML = '<span class="spinner"></span> Opening run…';
+  try {
+    const res = await fetch('/api/runs/' + encodeURIComponent(id));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    renderEflint(data);
+    const inp = data.input || {};
+    if (inp.text) {
+      $('#text').value = inp.text;
+      if (inp.language) $('#lang').value = inp.language;
+      $('#ctx').value = inp.domain_context || '';
+      $('#srl').checked = !!inp.srl_hints;
+    }
+    selectedRun = id;
+    document.querySelectorAll('#runs .run').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+    $('#status').textContent = `Opened run ${id}${data.provider ? ' · ' + data.provider : ''}${inp.text ? ' · input restored' : ' · input text was not saved for this run'}`;
+  } catch (err) {
+    $('#out').innerHTML = `<div class="err">Could not open run:\n${esc(err.message)}</div>`;
+    $('#status').textContent = 'Failed.';
+  }
+}
+$('#runsRefresh').onclick = loadRuns;
+loadRuns();
 
 function tokensHtml(tokens) {
   // Re-join tokens with spacing that reads naturally (no space before punctuation).

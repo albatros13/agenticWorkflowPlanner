@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>eFLINT verifier — process vs. norms</title>
+<style>
+  :root { --bg:#0f172a; --panel:#fff; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --bad:#dc2626; --warn:#92400e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; color:#0f172a; background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; color:#94a3b8; font-size:12px; }
+  .wrap { display:grid; grid-template-columns:minmax(380px,560px) 1fr; gap:16px; padding:16px; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h2 { margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .card h2 .opt { text-transform:none; letter-spacing:0; font-weight:500; font-size:11.5px; }
+  textarea { width:100%; height:140px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace; }
+  textarea.tall { height:200px; }
+  input[type=number], select { border:1px solid var(--line); border-radius:8px; padding:7px 8px; background:#fff; font:13px system-ui,sans-serif; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .row select.grow { flex:1; min-width:0; }
+  button { border:0; border-radius:8px; padding:8px 13px; font-weight:600; cursor:pointer; font-size:13px; }
+  .primary { background:var(--accent); color:#fff; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#eef2ff; color:var(--accent); }
+  .small { padding:4px 10px; font-size:12px; }
+  label.file { background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; padding:6px 10px; cursor:pointer; color:var(--muted); font-size:12.5px; white-space:nowrap; }
+  .muted { color:var(--muted); }
+  .hint { color:var(--muted); font-size:11.5px; margin:4px 0 0; }
+  .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; white-space:pre-wrap; margin:8px 0; }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .p-ok { background:#dcfce7; color:var(--ok); } .p-bad { background:#fee2e2; color:var(--bad); }
+  .p-warn { background:#fef3c7; color:var(--warn); } .p-info { background:#e0e7ff; color:#3730a3; }
+  .badges { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { background:#f1f5f9; border:1px solid var(--line); border-radius:6px; padding:1px 7px; font:12px ui-monospace,Menlo,monospace; }
+  .witness { font:12px ui-monospace,Menlo,monospace; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,Consolas,monospace; max-height:340px; margin:6px 0; }
+  details summary { cursor:pointer; font-weight:600; color:var(--muted); margin:8px 0 4px; }
+  .runs { max-height:460px; overflow:auto; }
+  .run { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
+  .run:hover { border-color:#bfdbfe; }
+  .run.sel { border-color:var(--accent); box-shadow:0 0 0 2px #dbeafe; }
+  .run .t { font-weight:600; font-size:13px; }
+  .run .m { color:var(--muted); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .checks label { margin-right:12px; font-size:13px; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+  @keyframes spin { to { transform:rotate(360deg);} }
+  @media(max-width:1000px){ .wrap{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>eFLINT verifier</h1>
+    <p>Check a process (Petri net) against an eFLINT normative specification, linked by qualification rules, with the eFLINT model-checking service.</p>
+  </div>
+  <span class="pill p-info" id="svc">checking service…</span>
+</header>
+
+<div class="wrap">
+  <!-- INPUTS -->
+  <div class="col">
+    <div class="card">
+      <h2>1 · Process model (Petri net) <span class="opt">required · PNML or .pn</span></h2>
+      <div class="row">
+        <select id="netSel" class="grow"><option value="">— nets from petri_net_generator storage —</option></select>
+        <button class="ghost small" id="netLoad" type="button">Load</button>
+        <label class="file">Upload<input type="file" data-target="physical" accept=".pnml,.pn,.xml,.txt" hidden /></label>
+      </div>
+      <textarea id="physical" class="tall" placeholder="Paste PNML (<pnml>…) or the .pn text format, e.g.&#10;place ready = 1&#10;transition begin: ready -> active"></textarea>
+      <p class="hint">PNML is normalised for the service (profile, final marking dropped, names turned into slugs); renames are listed in the result.</p>
+    </div>
+
+    <div class="card">
+      <h2>2 · Norms (eFLINT) <span class="opt">optional, with 3</span></h2>
+      <div class="row">
+        <select id="specSel" class="grow"><option value="">— specifications from text_to_eflint storage —</option></select>
+        <button class="ghost small" id="specLoad" type="button">Load</button>
+        <label class="file">Upload<input type="file" data-target="normative" accept=".eflint,.txt" hidden /></label>
+      </div>
+      <textarea id="normative" placeholder="eFLINT specification (facts, acts, duties, events). Use a self-contained file — #require is not resolved here."></textarea>
+    </div>
+
+    <div class="card">
+      <h2>3 · Qualification rules <span class="opt">required with 2</span></h2>
+      <div class="row"><label class="file">Upload<input type="file" data-target="qualification" accept=".txt,.qual,.ql" hidden /></label>
+        <span class="hint" id="transHint"></span></div>
+      <textarea id="qualification" placeholder="Map process transitions/markings to eFLINT acts and facts, e.g.&#10;Sequence&#10;    begin, finish&#10;Qualify as&#10;    register."></textarea>
+    </div>
+
+    <div class="card">
+      <h2>4 · Analysis <span class="opt">optional</span></h2>
+      <div class="row"><label class="file">Upload<input type="file" data-target="analysis" accept=".txt,.analysis" hidden /></label></div>
+      <textarea id="analysis" placeholder="Properties to check, e.g.&#10;Property never-finish Where Globally (Not (Tokens done = 1)).&#10;&#10;Leave empty to check compliance (no norm violation) over all process transitions."></textarea>
+      <details>
+        <summary>Scenario (for the explore operation)</summary>
+        <textarea id="scenario" placeholder="Scenario to explore (optional)"></textarea>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>5 · Options</h2>
+      <div class="row">
+        <label class="muted" for="operation">Operation</label>
+        <select id="operation">
+          <option value="auto">auto (from the analysis)</option>
+          <option value="model-check">model-check</option>
+          <option value="compliance-check">compliance-check</option>
+          <option value="plan">plan</option>
+          <option value="validate">validate inputs</option>
+          <option value="compile">compile</option>
+          <option value="run">run</option>
+          <option value="explore">explore</option>
+        </select>
+        <label class="muted" for="maxStates">Bound</label>
+        <input type="number" id="maxStates" min="0" placeholder="30" style="width:80px" />
+        <label class="muted" for="timeout">Timeout s</label>
+        <input type="number" id="timeout" min="1" placeholder="—" style="width:70px" />
+      </div>
+      <div class="row checks">
+        <label><input type="checkbox" id="normalize" checked /> normalise PNML</label>
+        <label><input type="checkbox" id="optAll" /> all plans</label>
+        <label><input type="checkbox" id="verbose" /> verbose</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="verify" type="button">Verify</button>
+        <button class="ghost" id="sample" type="button">Load sample</button>
+        <button class="ghost" id="clear" type="button">Clear</button>
+        <span class="muted" id="status"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS + RUNS -->
+  <div class="col">
+    <div class="card">
+      <h2>Result</h2>
+      <div id="result" class="muted">Provide the inputs and click <b>Verify</b>, or open a stored run below.</div>
+    </div>
+    <div class="card">
+      <h2>Stored verification runs <button class="ghost small" id="runsRefresh" type="button">Refresh</button></h2>
+      <div class="runs" id="runs"><p class="muted">Loading…</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let selectedRun = null;
+let lastRequest = null;  // service request of the opened stored run (for "restore inputs")
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : ('HTTP ' + res.status));
+  return data;
+}
+
+// ---- service status -------------------------------------------------------------------------
+async function checkService() {
+  try {
+    const h = await api('/api/health');
+    $('#svc').className = 'pill ' + (h.service_reachable ? 'p-ok' : 'p-bad');
+    $('#svc').textContent = (h.service_reachable ? '● service up · ' : '● service unreachable · ') + h.service_url;
+    $('#svc').title = h.detail || '';
+  } catch (e) { $('#svc').className = 'pill p-bad'; $('#svc').textContent = 'demo API error'; }
+}
+
+// ---- inputs: uploads + other agents' storage -------------------------------------------------
+document.querySelectorAll('input[type=file][data-target]').forEach(inp => inp.onchange = (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { $('#' + inp.dataset.target).value = r.result; $('#status').textContent = `Loaded ${f.name}`; if (inp.dataset.target === 'physical') showTransitions(); };
+  r.readAsText(f);
+  ev.target.value = '';
+});
+
+async function loadSources() {
+  try {
+    const nets = (await api('/api/sources/nets')).nets;
+    $('#netSel').innerHTML = `<option value="">${nets.length ? '— nets from petri_net_generator storage —' : '— no saved Petri nets —'}</option>` +
+      nets.map(n => `<option value="${esc(n.ref)}">${esc(n.name)} (${esc(n.ref)})</option>`).join('');
+  } catch (e) { $('#netSel').innerHTML = `<option value="">nets unavailable: ${esc(e.message)}</option>`; }
+  try {
+    const specs = (await api('/api/sources/eflint')).specs;
+    $('#specSel').innerHTML = `<option value="">${specs.length ? '— specifications from text_to_eflint storage —' : '— no saved eFLINT specifications —'}</option>` +
+      specs.map(s => `<option value="${esc(s.run_id)}">${esc(s.title)} · ${esc(s.status)} (${esc(s.run_id)})</option>`).join('');
+  } catch (e) { $('#specSel').innerHTML = `<option value="">specifications unavailable: ${esc(e.message)}</option>`; }
+}
+$('#netLoad').onclick = async () => {
+  const ref = $('#netSel').value; if (!ref) return;
+  try { $('#physical').value = (await api('/api/sources/nets/' + encodeURIComponent(ref))).source; $('#status').textContent = `Loaded net ${ref}`; showTransitions(); }
+  catch (e) { $('#status').textContent = e.message; }
+};
+$('#specLoad').onclick = async () => {
+  const id = $('#specSel').value; if (!id) return;
+  try { $('#normative').value = (await api('/api/sources/eflint/' + encodeURIComponent(id))).source; $('#status').textContent = `Loaded eFLINT spec ${id}`; }
+  catch (e) { $('#status').textContent = e.message; }
+};
+
+// Transition names help when writing qualification rules (best effort, client-side).
+function showTransitions() {
+  const src = $('#physical').value;
+  let names = [];
+  if (src.trim().startsWith('<')) {
+    try {
+      const doc = new DOMParser().parseFromString(src, 'application/xml');
+      names = [...doc.getElementsByTagName('transition')].map(t => {
+        const n = t.getElementsByTagName('name')[0];
+        return (n && n.textContent.trim()) || t.getAttribute('id');
+      });
+    } catch (e) { names = []; }
+  } else {
+    names = [...src.matchAll(/^\s*transition\s+([^:\s]+)/gm)].map(m => m[1]);
+  }
+  $('#transHint').textContent = names.length ? `Process transitions: ${names.slice(0, 20).join(', ')}${names.length > 20 ? ', …' : ''}` : '';
+}
+$('#physical').addEventListener('input', showTransitions);
+
+// ---- verify ------------------------------------------------------------------------------------
+function buildPayload() {
+  const v = (id) => $('#' + id).value;
+  const payload = {
+    operation: v('operation'),
+    physical: { language: 'petri-net', source: v('physical') },
+    normalize_pnml: $('#normalize').checked,
+    options: {},
+  };
+  if (v('normative').trim()) payload.normative = { language: 'eflint', source: v('normative') };
+  if (v('qualification').trim()) payload.qualification = v('qualification');
+  if (v('analysis').trim()) payload.analysis = v('analysis');
+  if (v('scenario').trim()) payload.scenario = v('scenario');
+  if (v('maxStates') !== '') payload.options.max_states = Number(v('maxStates'));
+  if (v('timeout') !== '') payload.options.timeout_seconds = Number(v('timeout'));
+  if ($('#optAll').checked) payload.options.all = true;
+  if ($('#verbose').checked) payload.options.verbose = true;
+  return payload;
+}
+
+$('#verify').onclick = async () => {
+  if (!$('#physical').value.trim()) { $('#status').textContent = 'A process model (step 1) is required.'; return; }
+  if (!!$('#normative').value.trim() !== !!$('#qualification').value.trim()) {
+    $('#status').textContent = 'Norms (2) and qualification rules (3) must be supplied together.'; return;
+  }
+  $('#verify').disabled = true;
+  $('#status').innerHTML = '<span class="spinner"></span> Verifying…';
+  try {
+    const data = await api('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload()) });
+    renderResult(data.output || {}, data.ok ? null : data.error);
+    $('#status').textContent = data.ok ? `Done · run ${data.run_id}` : 'Verification failed.';
+    selectedRun = data.run_id; lastRequest = null;
+    loadRuns();
+  } catch (e) {
+    $('#result').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    $('#status').textContent = 'Failed.';
+  } finally { $('#verify').disabled = false; }
+};
+
+const OUTCOME = {
+  no_counterexample_within_bound: ['holds within bound', 'p-ok'],
+  counterexample: ['violated — counterexample', 'p-bad'],
+  plan_found: ['plan found', 'p-ok'],
+  no_plan_within_bound: ['no plan within bound', 'p-bad'],
+  infeasible_configuration: ['infeasible configuration', 'p-warn'],
+  inconclusive: ['inconclusive', 'p-warn'],
+  execution: ['executed', 'p-info'],
+};
+
+function renderResult(o, error, extraHtml = '') {
+  const verdict = error ? 'error' : o.verdict;
+  const cls = { passed: 'p-ok', failed: 'p-bad', inconclusive: 'p-warn', error: 'p-bad' }[verdict] || 'p-info';
+  let html = `<div class="badges"><span class="pill ${cls}">${esc(verdict || '?')}</span>` +
+    (o.operation ? `<span class="pill p-info">${esc(o.operation)}</span>` : '') +
+    (o.run_id ? `<span class="pill p-info">run ${esc(o.run_id)}</span>` : '') +
+    (o.elapsed_s != null ? `<span class="pill p-info">${Number(o.elapsed_s).toFixed(2)} s</span>` : '') + `</div>`;
+  if (error) html += `<div class="err">${esc(error)}</div>`;
+  if (o.summary) html += `<p>${esc(o.summary)}</p>`;
+  html += extraHtml;
+
+  const props = o.properties || [];
+  if (props.length) {
+    html += `<table><tr><th>property</th><th>outcome</th><th>bound</th><th>witness (first trace)</th></tr>${props.map(p => {
+      const [txt, c] = OUTCOME[p.outcome] || [p.outcome, 'p-info'];
+      const w = (p.witness || []).map(step => step.join(', ') || '∅').join(' → ');
+      return `<tr><td><b>${esc(p.id)}</b></td><td><span class="pill ${c}">${esc(txt)}</span></td><td>${p.bound ?? ''}</td><td class="witness">${esc(w)}</td></tr>`;
+    }).join('')}</table>`;
+  }
+  if ((o.physical_transitions || []).length)
+    html += `<details open><summary>Process transitions (${o.physical_transitions.length})</summary><div class="chips">${o.physical_transitions.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div></details>`;
+  const ren = Object.entries(o.renamed || {});
+  if (ren.length)
+    html += `<details><summary>PNML renames (${ren.length}) — use the new names in qualification rules</summary><table><tr><th>original</th><th>renamed to</th></tr>${ren.map(([a, b]) => `<tr><td>${esc(a)}</td><td><span class="chip">${esc(b)}</span></td></tr>`).join('')}</table></details>`;
+  if ((o.pnml_changes || []).length)
+    html += `<details><summary>PNML changes</summary><ul>${o.pnml_changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></details>`;
+  if (o.analysis)
+    html += `<details><summary>Analysis submitted${o.analysis_generated ? ' (generated)' : ''}</summary><pre>${esc(o.analysis)}</pre></details>`;
+  if (o.raw_result)
+    html += `<details><summary>Raw service result</summary><pre>${esc(JSON.stringify(o.raw_result, null, 2))}</pre></details>`;
+  if (o.service_url) html += `<p class="hint">service ${esc(o.service_url)}${o.job_id ? ' · job ' + esc(o.job_id) : ''}</p>`;
+  $('#result').innerHTML = html;
+  const rb = $('#restore'); if (rb) rb.onclick = restoreInputs;
+}
+
+// ---- stored runs -----------------------------------------------------------------------------
+async function loadRuns() {
+  try {
+    const data = await api('/api/runs');
+    if (!data.runs.length) { $('#runs').innerHTML = '<p class="muted">No recorded verifications yet.</p>'; return; }
+    $('#runs').innerHTML = data.runs.map(r => {
+      const cls = { passed: 'p-ok', failed: 'p-bad', inconclusive: 'p-warn', error: 'p-bad' }[r.verdict] || 'p-info';
+      return `<div class="run ${r.run_id === selectedRun ? 'sel' : ''}" data-id="${esc(r.run_id)}">
+        <div class="t"><span class="pill ${cls}">${esc(r.verdict || '?')}</span> ${esc(r.operation)} <span class="muted" style="font-weight:400">· ${esc((r.created_at || '').replace('T', ' ').slice(0, 16))} · ${esc(r.run_id)}</span></div>
+        <div class="m" title="${esc(r.summary)}">${esc(r.summary)}</div></div>`;
+    }).join('');
+    document.querySelectorAll('#runs .run').forEach(el => el.onclick = () => openRun(el.dataset.id));
+  } catch (e) { $('#runs').innerHTML = `<div class="err">Could not list runs: ${esc(e.message)}</div>`; }
+}
+
+async function openRun(id) {
+  try {
+    const data = await api('/api/runs/' + encodeURIComponent(id));
+    const rep = data.report || {};
+    const err = rep.error ? `${rep.error.code || 'error'}: ${rep.error.message || ''}` : null;
+    lastRequest = data.request && data.request.inputs ? data.request : null;
+    const restore = lastRequest ? `<div class="row"><button class="ghost small" id="restore" type="button">Restore these inputs into the form</button><span class="hint">as submitted to the service (normalised PNML)</span></div>` : '';
+    renderResult(rep, err, restore);
+    selectedRun = id;
+    document.querySelectorAll('#runs .run').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+    $('#status').textContent = `Opened run ${id}`;
+  } catch (e) { $('#result').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+function restoreInputs() {
+  const req = lastRequest; if (!req) return;
+  const inp = req.inputs || {}, opt = req.options || {};
+  const generated = (inp.analysis || '').startsWith('// Generated by the eflint_verifier agent');
+  $('#physical').value = (inp.physical || {}).source || '';
+  $('#normative').value = (inp.normative || {}).source || '';
+  $('#qualification').value = inp.qualification || '';
+  $('#analysis').value = generated ? '' : (inp.analysis || '');
+  $('#scenario').value = inp.scenario || '';
+  $('#operation').value = generated ? 'auto' : (req.operation || 'auto');
+  $('#maxStates').value = opt.max_states ?? '';
+  $('#timeout').value = opt.timeout_seconds ?? '';
+  $('#optAll').checked = !!opt.all; $('#verbose').checked = !!opt.verbose;
+  showTransitions();
+  $('#status').textContent = `Inputs restored from run ${selectedRun}`;
+}
+
+// ---- sample / clear ----------------------------------------------------------------------------
+$('#sample').onclick = async () => {
+  try {
+    const s = await api('/api/sample');
+    for (const k of ['physical', 'normative', 'qualification', 'analysis']) $('#' + k).value = s[k] || '';
+    $('#scenario').value = ''; $('#operation').value = 'auto'; $('#maxStates').value = s.max_states ?? '';
+    showTransitions();
+    $('#status').textContent = s.description;
+  } catch (e) { $('#status').textContent = e.message; }
+};
+$('#clear').onclick = () => {
+  for (const k of ['physical', 'normative', 'qualification', 'analysis', 'scenario', 'maxStates', 'timeout']) $('#' + k).value = '';
+  $('#operation').value = 'auto'; $('#transHint').textContent = ''; $('#status').textContent = '';
+};
+$('#runsRefresh').onclick = () => { loadRuns(); loadSources(); checkService(); };
+
+checkService(); loadSources(); loadRuns();
+</script>
+</body>
+</html>

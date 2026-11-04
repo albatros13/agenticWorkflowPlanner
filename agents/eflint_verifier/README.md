@@ -23,6 +23,25 @@ user asks to verify a process against an eFLINT spec.
 - It's registered in `config/agents.json`, `config/storage.json` and
   `agents/coordinator/factory.py`, and has an `eflint_verifier` extra (httpx).
 
+## Demo app
+
+`uv run uvicorn agents.eflint_verifier.demo.main:app --port 8310`, then open http://localhost:8310.
+
+- Supply the inputs by pasting, uploading a file, or picking from other agents' storage:
+  - the Petri net (PNML or `.pn`): pick a net saved by `petri_net_generator`;
+  - the eFLINT norms: pick the self-contained `spec.eflint` of a `text_to_eflint` run;
+  - the qualification rules;
+  - an optional analysis and scenario.
+- Set the operation, bound, timeout and flags, then click **Verify**. *Load sample* fills in a small
+  worked example.
+- The result shows the verdict, the outcome of each property with its witness trace, the process
+  transitions (useful when writing qualification rules), PNML renames, the analysis that was
+  submitted, and the raw service result.
+- **Stored verification runs** lists `storage/runs/`. Open a run to see its report, and restore its
+  inputs into the form to re-run or edit it.
+- A badge in the header shows whether the external service (`EFLINT_VERIFIER_URL`) is reachable.
+  Browsing works without the service.
+
 ## PNML conversion
 
 The service rejected the PNML from `petri_net_generator`. It only accepts a stricter PNML layout,

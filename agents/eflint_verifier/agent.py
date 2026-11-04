@@ -11,7 +11,8 @@ What the wrapper adds on top of the raw service:
 * ``operation="auto"`` and a generated default compliance analysis when none is supplied;
 * a single verdict (``passed`` / ``failed`` / ``inconclusive``) over the per-property outcomes,
   with the first counterexample/plan witness flattened for display;
-* each verification is recorded under the agent's private storage ``runs/<run_id>/``.
+* each verification is recorded under the agent's private storage ``runs/<run_id>/``
+  (browse them with :meth:`EflintVerifierHandler.list_runs` / :meth:`EflintVerifierHandler.load_run`).
 
 Service-level failures (unreachable, rejected request, compile/solver error, timeout) produce a
 *failed* :class:`AgentResult`; a completed analysis that finds a counterexample is a *successful*
@@ -24,6 +25,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -41,6 +43,7 @@ log = logging.getLogger(__name__)
 
 AGENT_NAME = "eflint_verifier"
 VERIFY_EFLINT = "verify_eflint"
+_RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # run folder names; blocks path traversal
 
 
 def infer_operation(analysis: str | None) -> str:
@@ -257,6 +260,49 @@ class EflintVerifierHandler(AgentHandler):
             (run / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
         except OSError:  # recording is best effort; never fail a verification over it
             log.warning("could not record eFLINT verification run %s", run_id, exc_info=True)
+
+
+    # --- stored runs (browsing) -------------------------------------------------------------
+    def list_runs(self) -> list[dict]:
+        """Summaries of recorded verifications, newest first (unreadable folders are skipped)."""
+        root = self._runs()
+        if not root.is_dir():
+            return []
+        rows = []
+        for run in root.iterdir():
+            report_path = run / "report.json"
+            if not (run.is_dir() and report_path.is_file()):
+                continue
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            error = report.get("error")
+            rows.append({
+                "run_id": run.name,
+                "operation": report.get("operation", ""),
+                "verdict": report.get("verdict") or ("error" if error else ""),
+                "summary": report.get("summary") or (error or {}).get("message", ""),
+                "error_code": (error or {}).get("code"),
+                "properties": len(report.get("properties") or []),
+                "elapsed_s": report.get("elapsed_s"),
+                "created_at": datetime.fromtimestamp(report_path.stat().st_mtime, timezone.utc)
+                .isoformat(timespec="seconds"),
+            })
+        rows.sort(key=lambda r: r["created_at"], reverse=True)
+        return rows
+
+    def load_run(self, run_id: str) -> dict:
+        """``{run_id, report, request}`` of a recorded verification (``request`` may be ``{}``)."""
+        if not _RUN_ID.match(run_id or ""):
+            raise KeyError(f"invalid run id {run_id!r}")
+        run = self._runs() / run_id
+        if not (run / "report.json").is_file():
+            raise KeyError(f"no recorded verification {run_id!r}")
+        report = json.loads((run / "report.json").read_text(encoding="utf-8"))
+        request_path = run / "request.json"
+        request = json.loads(request_path.read_text(encoding="utf-8")) if request_path.is_file() else {}
+        return {"run_id": run_id, "report": report, "request": request}
 
 
 def _property(r: dict) -> PropertyResult:

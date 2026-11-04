@@ -45,7 +45,13 @@ def ask_openai_structured(*, task, system, prompt, schema, max_tokens=4096, mode
         }],
         tool_choice={"type": "function", "function": {"name": fn_name}},
     )
-    message = response.choices[0].message
+    choice = response.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        raise RuntimeError(
+            f"OpenAI output was truncated at max_tokens={max_tokens} before the structured "
+            f"result for task '{task}' was complete; shorten the input or raise max_tokens"
+        )
+    message = choice.message
     if not message.tool_calls:
         raise RuntimeError("OpenAI response contained no tool call")
     raw = message.tool_calls[0].function.arguments

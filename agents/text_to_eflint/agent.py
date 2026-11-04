@@ -9,13 +9,16 @@ Intents:
   optional scenario files) and run its scenarios; no LLM.
 
 Each generation is saved under the agent's private storage ``runs/<run_id>/`` (the ``.eflint``
-modules, ``spec.json`` and ``report.json``).
+modules, ``spec.json``, ``report.json`` and ``input.json`` — the request that produced it).
+:meth:`TextToEflintHandler.list_runs` / :meth:`TextToEflintHandler.load_run` browse that storage.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -32,6 +35,11 @@ from .generation.syntax import Program, parse_program
 AGENT_NAME = "text_to_eflint"
 GENERATE_EFLINT = "generate_eflint"
 VALIDATE_EFLINT = "validate_eflint"
+
+_RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # run folder names; blocks path traversal
+# Request fields persisted with each run (input.json) so a browsed run shows what produced it.
+_INPUT_FIELDS = ("title", "language", "domain_context", "srl_hints", "scenarios", "max_repair_rounds",
+                 "document_id", "sections")
 
 GENERATE_INPUT_SCHEMA = {
     "type": "object",
@@ -132,7 +140,11 @@ class TextToEflintHandler(AgentHandler):
         )
         run_id = uuid.uuid4().hex[:12]
         output = {"run_id": run_id, "provider": getattr(provider, "name", ""), **result.to_dict()}
-        self._save(run_id, output)
+        request_info = {k: p[k] for k in _INPUT_FIELDS if p.get(k) not in (None, "", [])}
+        request_info["language"] = p.get("language", "en")
+        request_info["text"] = text
+        request_info["created_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self._save(run_id, output, request_info)
         return AgentResult(agent=AGENT_NAME, intent=request.intent, status=JobStatus.succeeded,
                            output=output, artifacts_ref=run_id)
 
@@ -193,7 +205,7 @@ class TextToEflintHandler(AgentHandler):
             return Path(os.environ["EFLINT_RUNS_DIR"])
         return agent_storage(AGENT_NAME).path("runs")
 
-    def _save(self, run_id: str, output: dict) -> None:
+    def _save(self, run_id: str, output: dict, request_info: dict | None = None) -> None:
         run = self._runs() / run_id
         run.mkdir(parents=True, exist_ok=True)
         for name, content in output["files"].items():
@@ -201,10 +213,74 @@ class TextToEflintHandler(AgentHandler):
         (run / "spec.json").write_text(json.dumps(output["spec"], indent=2, ensure_ascii=False), encoding="utf-8")
         report = {k: v for k, v in output.items() if k not in ("files", "spec")}
         (run / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        if request_info is not None:
+            (run / "input.json").write_text(json.dumps(request_info, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # --- stored runs (browsing) -----------------------------------------------------------------
+    def list_runs(self) -> list[dict]:
+        """Summaries of the stored runs, newest first. Unreadable folders are skipped."""
+        root = self._runs()
+        if not root.is_dir():
+            return []
+        runs = []
+        for run in root.iterdir():
+            if not (run.is_dir() and (run / "report.json").is_file()):
+                continue
+            try:
+                report = json.loads((run / "report.json").read_text(encoding="utf-8"))
+                spec = _read_json(run / "spec.json") or {}
+                info = _read_json(run / "input.json") or {}
+            except (OSError, ValueError):
+                continue
+            created = info.get("created_at") or datetime.fromtimestamp(
+                (run / "report.json").stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+            runs.append({
+                "run_id": run.name,
+                "title": spec.get("title") or info.get("title") or run.name,
+                "status": report.get("status", ""),
+                "summary": report.get("summary", {}),
+                "provider": report.get("provider", ""),
+                "language": info.get("language", ""),
+                "created_at": created,
+                "has_input": bool(info.get("text")),
+            })
+        runs.sort(key=lambda r: r["created_at"], reverse=True)
+        return runs
+
+    def load_run(self, run_id: str) -> dict:
+        """A stored run in the same shape as ``generate_eflint`` output, plus ``input`` (may be {})."""
+        if not _RUN_ID.match(run_id or ""):
+            raise KeyError(f"invalid run id {run_id!r}")
+        run = self._runs() / run_id
+        if not (run / "report.json").is_file():
+            raise KeyError(f"no stored run {run_id!r}")
+        output = json.loads((run / "report.json").read_text(encoding="utf-8"))
+        output.setdefault("run_id", run_id)
+        output["spec"] = _read_json(run / "spec.json") or {}
+        output["files"] = {f.name: f.read_text(encoding="utf-8") for f in _eflint_files(run)}
+        output["input"] = _read_json(run / "input.json") or {}
+        for key, default in (("findings", []), ("scenarios", []), ("notes", []), ("history", []), ("rounds", 0)):
+            output.setdefault(key, default)
+        return output
 
     @staticmethod
     def _fail(intent: str, error: str) -> AgentResult:
         return AgentResult(agent=AGENT_NAME, intent=intent, status=JobStatus.failed, error=error)
+
+
+def _read_json(path: Path) -> dict | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+
+def _eflint_files(run: Path) -> list[Path]:
+    """Run modules in reading order: Ontology, Norms, Init, Scenario-1..n, then the rest (spec last)."""
+    order = {"Ontology.eflint": 0, "Norms.eflint": 1, "Init.eflint": 2, "spec.eflint": 9}
+
+    def key(f: Path):
+        m = re.match(r"Scenario-(\d+)\.eflint$", f.name)
+        return (3, int(m.group(1)), "") if m else (order.get(f.name, 8), 0, f.name)
+
+    return sorted(run.glob("*.eflint"), key=key)
 
 
 __all__ = ["TextToEflintHandler", "GENERATE_EFLINT", "VALIDATE_EFLINT"]

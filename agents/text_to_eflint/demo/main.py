@@ -10,6 +10,9 @@ provider via the shared ``api``-backed layer and surfaces failures to the UI.
 
 POST /api/generate runs the agent's ``generate_eflint`` intent (LLM draft -> check -> repair) and
 returns the specification, findings, scenario results and rendered ``.eflint`` files.
+
+GET /api/runs lists the generations stored in the agent's storage (``runs/<run_id>/``) and
+GET /api/runs/{run_id} reopens one (same shape as /api/generate, plus the saved ``input``).
 """
 from __future__ import annotations
 
@@ -161,6 +164,25 @@ def generate(req: GenerateRequest) -> dict:
     if not result.ok:
         raise HTTPException(status_code=422, detail=result.error)
     return result.output
+
+
+def _store() -> TextToEflintHandler:
+    """Handler used only to read stored runs (no provider is created)."""
+    return TextToEflintHandler()
+
+
+@app.get("/api/runs")
+def runs() -> dict:
+    items = _store().list_runs()
+    return {"runs": items, "count": len(items)}
+
+
+@app.get("/api/runs/{run_id}")
+def run(run_id: str) -> dict:
+    try:
+        return _store().load_run(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0]))
 
 
 @app.get("/api/health")
