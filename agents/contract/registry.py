@@ -9,17 +9,33 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .base import Agent, AgentHandler, HttpAgent, InProcessAgent
+from pydantic import BaseModel
+
+from .base import Agent, AgentError, AgentHandler, HttpAgent, InProcessAgent
 
 
 class RegistryError(RuntimeError):
     """Raised for malformed registry config or unresolved intents/agents."""
 
 
+class AgentCapability(BaseModel):
+    """One intent that can be routed to an available agent, for discovery."""
+
+    agent: str
+    intent: str
+    description: str = ""
+
+
 class AgentRegistry:
-    def __init__(self, agents: dict[str, Agent], intent_map: dict[str, str]):
+    def __init__(
+        self,
+        agents: dict[str, Agent],
+        intent_map: dict[str, str],
+        descriptions: dict[str, str] | None = None,
+    ):
         self._agents = agents
         self._intent_map = intent_map
+        self._descriptions = descriptions or {}  # agent name -> config description
 
     @classmethod
     def from_config(
@@ -32,10 +48,12 @@ class AgentRegistry:
         spec = json.loads(Path(config_path).read_text(encoding="utf-8"))
         agents: dict[str, Agent] = {}
         intent_map: dict[str, str] = {}
+        descriptions: dict[str, str] = {}
 
         for entry in spec.get("agents", []):
             name = entry["name"]
             transport = entry.get("transport", "in_process")
+            descriptions[name] = entry.get("description", "")
 
             if transport == "in_process":
                 handler = handlers.get(name)
@@ -55,7 +73,7 @@ class AgentRegistry:
             for intent in entry.get("intents", []):
                 intent_map[intent] = name
 
-        return cls(agents, intent_map)
+        return cls(agents, intent_map, descriptions)
 
     def get(self, name: str) -> Agent:
         if name not in self._agents:
@@ -71,3 +89,22 @@ class AgentRegistry:
 
     def names(self) -> list[str]:
         return sorted(self._agents)
+
+    def capabilities(self) -> list[AgentCapability]:
+        """The routable intents of the available agents, described by each agent's manifest.
+
+        An agent whose manifest cannot be fetched (a remote agent that is down) keeps its intents,
+        described by its config entry, so discovery never fails because of one agent.
+        """
+        found: list[AgentCapability] = []
+        for name in self.names():
+            try:
+                described = {c.intent: c.description for c in self._agents[name].manifest().capabilities}
+            except AgentError:
+                described = {}
+            found += [
+                AgentCapability(agent=name, intent=intent,
+                                description=described.get(intent) or self._descriptions.get(name, ""))
+                for intent, owner in sorted(self._intent_map.items()) if owner == name
+            ]
+        return found

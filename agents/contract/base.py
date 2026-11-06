@@ -76,7 +76,8 @@ class HttpAgent(Agent):
     def manifest(self) -> AgentManifest:
         try:
             with self._client() as client:
-                resp = client.get("/agent/manifest")
+                # Discovery runs at start-up: a hung agent must not stall it for the job timeout.
+                resp = client.get("/agent/manifest", timeout=min(self.timeout_s, 10.0))
                 resp.raise_for_status()
                 return AgentManifest.model_validate(resp.json())
         except AgentError:

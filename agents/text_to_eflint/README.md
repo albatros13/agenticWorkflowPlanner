@@ -60,8 +60,6 @@ The code lives in [`generation/`](generation/):
   asserted. That is what makes the upstream scenarios come out as their author expected, but the
   real interpreter might behave differently. The checker shows a warning whenever this case
   appears.
-- **Coordinator chat routing isn't wired:** the agent is registered, so it can be called by
-  intent, but the coordinator's chat intent classifier doesn't route requests to it yet.
 - **Input size:** inputs over 60k characters are rejected. Generate one article at a time and
   pass the previous result as `base_spec` to extend it.
 

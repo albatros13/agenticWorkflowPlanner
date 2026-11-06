@@ -89,7 +89,7 @@ Tests write their run records to pytest's temporary directory, so normally nothi
 
 ## Limitations / next steps
 
-Qualification rules are always required. The coordinator doesn't create them, and it doesn't yet
-pass the output of `text_to_eflint` into verification, so the eFLINT spec has to be pasted too. A
-natural next step would be an LLM step that drafts the rules and checks them with the service's
-`validate` operation.
+Qualification rules are always required, and the coordinator doesn't create them. A spec generated
+by `text_to_eflint` from a project becomes that project's spec, but the rules still have to be
+pasted. A natural next step would be an LLM step that drafts the rules and checks them with the
+service's `validate` operation.

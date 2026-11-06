@@ -24,10 +24,47 @@ classification and forwarded verbatim, never echoed through the LLM.
 | `generate_petri_net` | Builds a workflow Petri net. Source order: attached BPMN → description in the message (`Petri net for: …`) → the project's BPMN model → the project's description. A derived view: recorded in the history, no state change. Blocking ambiguities come back as questions. | `petri_net_generator` |
 | `verify_eflint` | Verifies the process against an eFLINT specification (see below). | `eflint_verifier` (+ `petri_net_generator`) |
 | `verify_model` | Delegates to `verify_eflint` when the project has an eFLINT spec; otherwise it is state-gated and reports that no verification agent is available. | — |
+| `generate_eflint` | Formalises a regulation as eFLINT. Source order: pasted document → text after a colon → named library document → the message itself if long. A spec that passes its checks becomes the project's spec for `verify_eflint`; one that needs review never replaces it. | `text_to_eflint` |
+| `validate_eflint` | Checks a pasted spec, or the project's, and runs its scenarios. Stores nothing. | `text_to_eflint` |
+| `upload_document` | Adds a pasted document to the library. | `regulatory_docs` |
+| `find_documents` | Lists the library, or looks documents up by title, id or preview. | `regulatory_docs` |
+| `vectorize_document` | Embeds a stored document into Qdrant, named by id or title, with an optional profile. An ambiguous name comes back as a question. | `regulatory_docs` |
+| `list_vectorized` | Lists the documents in the profiles' Qdrant collections. | `regulatory_docs` |
+| `search_vectors` | Semantic search over document content ("what does the GDPR say about consent?"). | `regulatory_docs` |
+| `list_capabilities` | Lists the registered agents and what they do ("help"). Also part of the reply when a message isn't understood. | — |
 | `open_project`, `project_status`, `list_projects`, `find_project`, `revise_description`, `delete_project` | Project management. `revise_description` with a semantic change invalidates prior verification. | — |
 
-The `regulatory_docs` and `text_to_eflint` agents are registered too, but the intent classifier
-does not emit their intents yet.
+### Adding an agent
+
+Add the agent to `config/agents.json` and its handler to `factory.py` (a remote `http` agent needs
+only the config entry). Nothing else is required for the coordinator to reach it:
+
+- `AgentRegistry.capabilities()` reads each agent's manifest, falling back to the config description
+  for a remote agent that is down.
+- The LLM classifier gets the available intents as its allowed values and is told what each one does
+  from the manifest description. Agents that aren't available can't be chosen.
+- The heuristic classifier recognises a new intent by its name at the start of a message
+  (`summarize_document` from "summarize document ...").
+- An intent with no dedicated handler is forwarded with `{text, ...slots}`, plus `attachments` and
+  `bpmn_xml` if present.
+
+Add a dedicated handler when the agent needs a specific payload, a readable reply, or lifecycle
+transitions, and add routing guidance to `_GUIDANCE` in `intent.py` if the manifest description
+isn't enough to tell it apart from similar intents.
+
+### Regulatory documents
+
+These commands are recognised only at the start of a message, so a process description that mentions
+documents is still modelled as a process. Paste a document as a ```` ```regulation ````,
+```` ```document ```` or ```` ```markdown ```` block, or after a colon. A block is split off in code
+and never reaches the classifier; text after a colon is seen by it, so prefer a block for long
+documents.
+
+The chat doesn't accept file paths, so that a message can't make the server read files from its own
+disk. Upload files through the `regulatory_docs` demo app.
+
+The library is shared across projects. Uploads and vectorizations made from an open project are noted
+in its history, with no lifecycle change.
 
 ### eFLINT verification
 
@@ -123,5 +160,5 @@ Projects are saved under `storage/projects/<user_id>/<project_id>.json` (see
 ## Tests
 
 `tests/coordinator/` (state machine, project store), `tests/test_coordinator.py`,
-`tests/test_coordinator_service.py`, `tests/test_coordinator_petri_net.py` and
-`tests/test_coordinator_eflint.py`, all offline.
+`tests/test_coordinator_service.py`, `tests/test_coordinator_petri_net.py`,
+`tests/test_coordinator_eflint.py` and `tests/test_coordinator_capabilities.py`, all offline.

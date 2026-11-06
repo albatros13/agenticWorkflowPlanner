@@ -4,9 +4,10 @@ The `regulatory_docs` agent lets a user **upload** regulatory documents, **find 
 from a library, and **vectorize** the selected document into **Qdrant** for later retrieval. The
 `text_to_eflint` agent can also read library documents by `document_id`.
 
-- **Intents:** `upload_document`, `find_documents`, `vectorize_document`.
-- **Registered:** in-process in `config/agents.json`, but the coordinator's intent classifier does
-  not emit these intents yet. Use the demo app, or call the agent directly.
+- **Intents:** `upload_document`, `find_documents`, `vectorize_document`, `list_vectorized`,
+  `search_vectors`.
+- **Registered:** in-process in `config/agents.json`. The coordinator routes all five intents from
+  chat, except that its uploads take pasted text only. Upload files through the demo app.
 
 ## Intents
 
@@ -15,6 +16,8 @@ from a library, and **vectorize** the selected document into **Qdrant** for late
 | `upload_document` | `text` or `path`; optional `title`, `source_document` | `document` (the library record) and the available `profiles` |
 | `find_documents` | optional `query` | `documents`, `count`, `profiles` |
 | `vectorize_document` | `doc_id`; optional `profile` (default from config) | `vectorization` (collection, cluster, dimension, points, embedding model) and the updated `document` |
+| `list_vectorized` | optional `profile` (default: all profiles) | `collections` (cluster, collection, profiles, `documents`, and an `error` if that collection can't be read) and `count` |
+| `search_vectors` | `query`; optional `profile`, `limit` (1–50, default 5) | `query`, `profile`, `cluster`, `collection` and `hits` (score, text, title, section and source location) |
 
 ## How it works
 
@@ -81,6 +84,6 @@ deletes it) when `QDRANT_URL` / `QDRANT_API_KEY` are set; otherwise it skips.
 
 ## Next steps
 
-- A `search` intent to query a collection (feeding the semantic cache and verification agents).
-- Coordinator intent recognition for `upload_document` / `find_documents` / `vectorize_document`.
+- Use `search_vectors` to feed the semantic cache and verification agents.
+- A contract service (`service.py`) like the other agents have, so this agent can also run over HTTP.
 - End-to-end checks of large-document batching with OpenAI embeddings.

@@ -13,9 +13,10 @@ from .models import (
     Job,
     JobStatus,
 )
-from .registry import AgentRegistry
+from .registry import AgentCapability, AgentRegistry
 
 __all__ = [
+    "AgentCapability",
     "Agent",
     "AgentHandler",
     "HttpAgent",

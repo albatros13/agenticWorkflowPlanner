@@ -25,7 +25,7 @@ the detailed description. Only the transport-agnostic contract is shared:
 | **petri_net_generator** | BPMN 2.0 XML / text→BPMN IR / text → ordinary workflow Petri net → PNML, with structural and soundness checks. | `generate_petri_net` | [`agents/petri_net_generator/`](agents/petri_net_generator/README.md) |
 | **eflint_verifier** | Verifies a Petri net against an eFLINT specification through qualification rules (bounded model checking, compliance checking, planning). A wrapper around the **external** eFLINT model-checking service. | `verify_eflint` | [`agents/eflint_verifier/`](agents/eflint_verifier/README.md) |
 | **text_to_eflint** | Regulatory text → executable eFLINT specification (LLM draft, then parse / type-check / scenario-test / repair). Also vendors the FLINT ontology and an LLM semantic-role labeller. | `generate_eflint`, `validate_eflint` | [`agents/text_to_eflint/`](agents/text_to_eflint/README.md) |
-| **regulatory_docs** | Content-addressed library of regulatory documents (upload / find) and config-driven vectorization into Qdrant. | `upload_document`, `find_documents`, `vectorize_document` | [`agents/regulatory_docs/`](agents/regulatory_docs/README.md) |
+| **regulatory_docs** | Content-addressed library of regulatory documents (upload / find), config-driven vectorization into Qdrant, and semantic search. | `upload_document`, `find_documents`, `vectorize_document`, `list_vectorized`, `search_vectors` | [`agents/regulatory_docs/`](agents/regulatory_docs/README.md) |
 
 - **`agents/contract/`**: the shared contract (`AgentHandler`, `InProcessAgent`, `HttpAgent`,
   request/result models) and the `AgentRegistry` that reads `config/agents.json`.
@@ -51,7 +51,7 @@ the detailed description. Only the transport-agnostic contract is shared:
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
 │ TEXT→BPMN   │  │ PETRI NET   │  │ eFLINT      │  │ TEXT→eFLINT │  │ REGULATORY  │  │ (future:    │
 │ :8120       │  │ GENERATOR   │  │ VERIFIER    │  │ :8091       │  │ DOCS :8110  │  │ simulation, │
-│             │  │ :8200       │  │ :8300       │  │ not routed  │  │ not routed  │  │ KG, …)      │
+│             │  │ :8200       │  │ :8300       │  │             │  │             │  │ KG, …)      │
 └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘
        ▼                ▼                ▼                ▼                ▼
  LLM providers     PM4Py (AGPL)    eFLINT model-    LLM providers     embeddings,
@@ -64,10 +64,9 @@ the detailed description. Only the transport-agnostic contract is shared:
 ```
 
 Ports are those of each agent's standalone service; by default every sub-agent runs **in-process**
-inside the coordinator. The coordinator routes `engineer_process`, `generate_petri_net` and
-`verify_eflint` (also reached through `verify_model` when a project has an eFLINT spec). The
-`text_to_eflint` and `regulatory_docs` agents are registered, but the intent classifier does not
-emit their intents yet; use their demo apps or call them directly.
+inside the coordinator. The coordinator routes the intents of all registered agents from chat, and
+reads their capabilities from the agent manifests, so a new agent only needs registering (see
+[Adding an agent](agents/coordinator/README.md#adding-an-agent)).
 
 #### LLM Layer (`api/` + `agents/text_to_bpmn/pipeline/llm/`)
 - **`api/`** owns the actual SDK calls: `ask_anthropic_structured` / `ask_openai_structured` force a single tool/function call to return schema-valid JSON, alongside the existing chat/tool-loop/vision helpers.

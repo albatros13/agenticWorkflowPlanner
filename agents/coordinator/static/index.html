@@ -103,7 +103,7 @@
     <div id="log"></div>
     <div class="suggests" id="suggests" style="padding:0 14px"></div>
     <div id="composer">
-      <textarea id="text" placeholder="Describe a process to engineer, or type an instruction (e.g. 'list my projects', 'refine the model', 'verify')…"></textarea>
+      <textarea id="text" placeholder="Describe a process to engineer, or type an instruction (e.g. 'list my projects', 'verify', 'search the regulations for data retention', 'help')…"></textarea>
       <button class="primary" id="send">Send</button>
     </div>
   </section>
@@ -272,6 +272,7 @@ function handleResponse(data) {
   const out = data.agent_result && data.agent_result.output;
   if (out && out.bpmn_xml) renderDiagram(bubble, out);
   if (out && out.pnml) renderPetriNet(bubble, out);
+  if (out && out.files && out.files['spec.eflint']) renderEflint(bubble, out);
 
   loadProjects();
 }
@@ -334,6 +335,25 @@ function renderPetriNet(bubble, out) {
     const blob = new Blob([out.pnml], { type:'application/xml' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = (out.process_name || activeProjectName || 'process') + '.pnml'; a.click();
+  };
+}
+
+// ---- eFLINT specification -------------------------------------------------
+function renderEflint(bubble, out) {
+  const ok = out.status === 'succeeded', s = out.summary || {};
+  const wrap = document.createElement('div');
+  wrap.className = 'diagram-wrap';
+  wrap.innerHTML = `
+    <div class="bar">
+      <div class="badges"><span class="badge ${ok ? 'b-ok':'b-bad'}">${ok ? '✓ Checks passed' : '✕ Needs review'}</span>
+        <span class="badge b-info">${Number(s.errors) || 0} errors · ${Number(s.warnings) || 0} warnings</span></div>
+      <div><button data-dl>Download .eflint</button></div>
+    </div>`;
+  bubble.appendChild(wrap);
+  wrap.querySelector('[data-dl]').onclick = () => {
+    const blob = new Blob([out.files['spec.eflint']], { type:'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = (activeProjectName || 'specification') + '.eflint'; a.click();
   };
 }
 

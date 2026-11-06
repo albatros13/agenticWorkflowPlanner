@@ -12,6 +12,7 @@ from agents.contract import AgentRegistry
 from agents.eflint_verifier.agent import EflintVerifierHandler
 from agents.paths import AGENTS_CONFIG, PROJECT_STATES_CONFIG
 from agents.petri_net_generator.agent import PetriNetGeneratorHandler
+from agents.regulatory_docs.agent import RegulatoryDocsHandler
 from agents.text_to_bpmn.agent import TextToBpmnHandler
 from agents.text_to_eflint.agent import TextToEflintHandler
 
@@ -24,17 +25,19 @@ from .projects.store import ProjectStore
 from .state.machine import StateMachine
 
 
-def _default_classifier() -> IntentClassifier:
-    """Use the LLM classifier when a key is present; otherwise stay fully offline."""
+def _default_classifier(registry: AgentRegistry) -> IntentClassifier:
+    """Use the LLM classifier when a key is present; otherwise stay fully offline. Either way the
+    classifier learns what to recognise from the registry."""
     if os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY"):
         try:
             from agents.text_to_bpmn.pipeline.config import Settings
             from agents.text_to_bpmn.shaping import select_provider
 
-            return LLMIntentClassifier(select_provider(Settings.from_env()))
+            return LLMIntentClassifier(select_provider(Settings.from_env()),
+                                       capabilities=registry.capabilities())
         except Exception:
             pass
-    return HeuristicIntentClassifier()
+    return HeuristicIntentClassifier(registered_intents=registry.intents())
 
 
 def build_coordinator(
@@ -46,6 +49,7 @@ def build_coordinator(
         "text_to_bpmn": TextToBpmnHandler(),
         "petri_net_generator": PetriNetGeneratorHandler(),  # PM4Py loads lazily on first use
         "text_to_eflint": TextToEflintHandler(),  # LLM provider resolved per request
+        "regulatory_docs": RegulatoryDocsHandler(),  # library, embedder and Qdrant load lazily
         # Client of the external eFLINT model-checking service (EFLINT_VERIFIER_URL, default :8100).
         "eflint_verifier": EflintVerifierHandler(),
     }
@@ -57,6 +61,6 @@ def build_coordinator(
         store=store or JsonProjectStore(),
         machine=machine,
         cache=cache,
-        classifier=classifier or _default_classifier(),
+        classifier=classifier or _default_classifier(registry),
         handoff=ModelHandoff(),
     )
