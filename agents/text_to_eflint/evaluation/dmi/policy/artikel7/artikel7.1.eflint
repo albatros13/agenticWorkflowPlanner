@@ -1,0 +1,68 @@
+//ARTIKEL 7.1.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.1** Producten, diensten en data binnen het DMI-ecosysteem die
+//   > grotendeels zijn gefinancierd met publieke middelen, dienen om niet
+//   > beschikbaar te zijn voor Deelnemers en zijn geen Commons. Kosten die
+//   > ontstaan als gevolg van het daadwerkelijk gebruik van deze producten,
+//   > diensten en data kunnen echter wel aan desbetreffende Deelnemer(s)
+//   > worden doorberekend.
+//   
+//   We formaliseren alleen de eerste helft van het Artikel expliciet. De
+//   tweede helft doen we niets mee, aangezien we leveringskosten niet echt
+//   formaliseren.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaalt of een PDD grotendeels met publieke middelen is gefinancieerd.
+Fact pdd-grotendeels-publiek-gefinancieerd Identified by [PDD]
+    // Publieke organisaties publiceren altijd met publieke middelen gefinaniceerde data.
+    Derived from (Foreach aanbod:
+        pdd-grotendeels-publiek-gefinancieerd(aanbod.[PDD])
+        When deelnemer-type(aanbod.aanbieder, "Publiek")
+    )
+
+
+
+
+
+///// PLICHTEN /////
+/// Aanbieders moeten PDD die grotendeels publiek gefinancieerd zijn om niet aanbieden, en óók niet
+/// als Commons.
+Duty pdd-grotendeels-publiek-gefinancieerd-om-niet
+    Holder aanbieder
+    Claimant [Ecoraad]
+    Related to aanbod
+    // De plicht geldt als de aanbieder iets heeft aangeboden wat publieke gefinaniceerd is
+    Derived from (Foreach aanbod, [Ecoraad]:
+        pdd-grotendeels-publiek-gefinancieerd-om-niet(aanbod.aanbieder, [Ecoraad], aanbod)
+        When pdd-grotendeels-publiek-gefinancieerd(aanbod.[PDD])
+    )
+    // De plicht is geschonden als er niet-gratis kosten mee gemoeid zijn.
+    Violated when (Exists prijs:
+        prijs.aanbod == aanbod && prijs.int > 0
+    )
+    // Voor de veiligheid vinden we het ook onredelijk als er een overeenkomst is gesloten met een
+    // niet-nul prijs.
+    Violated when (Exists afgesproken-prijs:
+        afgesproken-prijs.reactie.aanbod == aanbod && afgesproken-prijs.int > 0
+    )
+    /// Als het aanbod als Commons is gedaan, is dat ook bad joejoe.
+    Violated when aanbod-als-commons(aanbod)
+    /// Net als dat er een overeenkomst is worden gesloten over dat onderwerp.
+    Violated when (Exists overeenkomst:
+        overeenkomst.reactie.aanbod == aanbod
+        && reactie-als-commons(overeenkomst.reactie)
+    )
+
+
+
+
+
+//// EINDE /////
+.

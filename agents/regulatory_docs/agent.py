@@ -17,17 +17,14 @@ stay in config rather than in code.
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Callable
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
-from agents.storage import agent_storage
 
 from .config import EmbeddingConfig, QdrantConfig, VectorizationConfig
 from .embeddings import Embedder, build_embedder
-from .library import DocumentLibrary
+from .library import DocumentLibrary, default_library_root
 from .qdrant_store import VectorStore, build_store
 from .vectorizer import vectorize_document
 
@@ -56,6 +53,10 @@ class RegulatoryDocsHandler(AgentHandler):
         self._config = config
         self._embedder_factory = embedder_factory or build_embedder
         self._store_factory = store_factory or build_store
+        # Clients are reused across requests (a cloud Qdrant / OpenAI client per call meant a new
+        # TLS connection per request), keyed by the profile section that configures them.
+        self._embedders: dict[str, Embedder] = {}
+        self._stores: dict[str, VectorStore] = {}
 
     # ---- contract ------------------------------------------------------------
     def manifest(self) -> AgentManifest:
@@ -189,8 +190,8 @@ class RegulatoryDocsHandler(AgentHandler):
         profile_name = request.payload.get("profile") or self._cfg().default_profile
         profile = self._cfg().profile(profile_name)
 
-        embedder = self._embedder_factory(profile.embedding)
-        store = self._store_factory(profile.qdrant)
+        embedder = self._embedder(profile.embedding)
+        store = self._store(profile.qdrant)
         result = vectorize_document(
             document,
             profile,
@@ -227,7 +228,7 @@ class RegulatoryDocsHandler(AgentHandler):
         cfg = self._cfg()
         requested = request.payload.get("profile")
         names = [requested] if requested else cfg.profile_names()
-        library_ids = {r.doc_id for r in self._lib().find()}
+        library_ids = self._lib().ids()
 
         targets: dict[tuple[str, str], dict] = {}
         for name in names:
@@ -244,7 +245,7 @@ class RegulatoryDocsHandler(AgentHandler):
                 "error": None,
             }
             try:
-                docs = self._store_factory(profile.qdrant).list_documents()
+                docs = self._store(profile.qdrant).list_documents()
                 target["documents"] = [
                     {**d, "in_library": d["doc_id"] in library_ids} for d in docs
                 ]
@@ -271,9 +272,9 @@ class RegulatoryDocsHandler(AgentHandler):
         profile = self._cfg().profile(profile_name)
         limit = max(1, min(int(request.payload.get("limit") or 5), 50))
 
-        vector = self._embedder_factory(profile.embedding)([query])[0]
-        hits = self._store_factory(profile.qdrant).search(vector, limit)
-        library_ids = {r.doc_id for r in self._lib().find()}
+        vector = self._embedder(profile.embedding)([query])[0]
+        hits = self._store(profile.qdrant).search(vector, limit)
+        library_ids = self._lib().ids()
         for hit in hits:
             hit["in_library"] = hit.get("doc_id") in library_ids
         return AgentResult(
@@ -292,13 +293,20 @@ class RegulatoryDocsHandler(AgentHandler):
     # ---- helpers -------------------------------------------------------------
     def _lib(self) -> DocumentLibrary:
         if self._library is None:
-            root = (
-                Path(os.environ["REGDOCS_DIR"])
-                if os.getenv("REGDOCS_DIR")
-                else agent_storage(AGENT_NAME).path("documents")
-            )
-            self._library = DocumentLibrary(root)
+            self._library = DocumentLibrary(default_library_root())
         return self._library
+
+    def _embedder(self, cfg: EmbeddingConfig) -> Embedder:
+        key = cfg.model_dump_json()
+        if key not in self._embedders:
+            self._embedders[key] = self._embedder_factory(cfg)
+        return self._embedders[key]
+
+    def _store(self, cfg: QdrantConfig) -> VectorStore:
+        key = cfg.model_dump_json()
+        if key not in self._stores:
+            self._stores[key] = self._store_factory(cfg)
+        return self._stores[key]
 
     def _cfg(self) -> VectorizationConfig:
         if self._config is None:

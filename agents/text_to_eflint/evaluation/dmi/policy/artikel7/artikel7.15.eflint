@@ -1,0 +1,50 @@
+// ARTIKEL 7.15.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.15** Aanbieding als Commons mag nimmer data betreffen die reeds als
+//   > “open data” gepubliceerd wordt (al dan niet tegen verstrekkingskosten).
+// 
+//   We formaliseren dit Artikel dat, áls er informatie is dat een dataset
+//   ergens als "open data" is gepubliceerd, het niet zo mag zijn dat het is
+//   aangeboden als Commons.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaalt dat een data ergens (anders) als "open data" is gepubliceerd.
+Fact data-is-als-open-data-gepubliceerd Identified by [Data]
+
+Extend Fact [Data] Derived from (Foreach data-is-als-open-data-gepubliceerd: data-is-als-open-data-gepubliceerd.[Data])
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+Duty open-data-mag-geen-commons-zijn
+    Holder aanbieder
+    Claimant [Ecoraad]
+    Related to aanbod
+    // De plicht geldt wanneer de data "open data" is.
+    Holds when (
+        aanbod.aanbieder == aanbieder
+        && [Data](aanbod.[PDD])
+        && data-is-als-open-data-gepubliceerd([Data](aanbod.[PDD]))
+    )
+    // De plicht is geschonden zodra het aanbod als Commons wordt gepubliceerd óf afgenomen
+    Violated when aanbod-als-commons(aanbod)
+    Violated when (Exists reactie:
+        reactie.aanbod == aanbod
+        && reactie-als-commons(reactie)
+    )
+
+
+
+
+
+///// EINDE /////
+.

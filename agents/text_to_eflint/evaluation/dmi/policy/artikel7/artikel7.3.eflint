@@ -1,0 +1,86 @@
+// ARTIKEL 7.3.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.3** Voor 2023 bedraagt de vastgestelde Eurowaarde voor de Commons
+//   > per Deelnemer Euro 2.500,-- (inclusief BTW) op jaarbasis. Deze
+//   > Eurowaarde moet direct herleidbaar zijn tot de commerciële waarde van de
+//   > als Commons aangeboden producten, diensten en/of data(gebruik) in de
+//   > Producten en Diensten Catalogus.
+//   
+//   Omdat wij niet het budget aan het begin van het jaar berekenen, wordt het
+//   eerste deel van het artikel geformaliseerd als dat we stellen dat het
+//   budget tussen Deelnemers vanaf 2023 nooit hoger kan zijn dan de maximum.
+//   
+//   Het tweede deel van het Artikel interpreteren we als dat iets aangeboden
+//   als Commons ook iets moet betreffen wat commercieel beschikbaar is (met
+//   uitzonderingen van publieke organisaties en kennisinstellingen).
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Stelt dat een gegeven PDD ook commercieel beschikbaar is.
+/// 
+/// Dit is niet per sé hetzelfde als ook Commercieel aangeboden.
+Fact pdd-commercieel-beschikbaar Identified by [PDD]
+
+Extend Fact [PDD] Derived from (Foreach pdd-commercieel-beschikbaar: pdd-commercieel-beschikbaar.[PDD])
+
+
+
+
+
+///// BOEKHOUDING /////
+/// Markeert een aanbod als dat de aangeboden PDD ook commercieel beschikbaar is.
+/// 
+/// Bestaat omdat ik eigenlijk denk dat de Haskell reasoner moeite heeft met projectie in clauses
+/// zonder iteratie - e.g., `Violated when` enzo.
+Fact aanbod-commercieel-beschikbaar Identified by aanbod
+    Holds when pdd-commercieel-beschikbaar(aanbod.[PDD])
+
+
+
+/// Markeert Deelnemers die commercieel dingen kunnen aanbieden.
+Fact deelnemer-privaat Identified by [Deelnemer]
+    Holds when deelnemer-type([Deelnemer], "Privaat groot")
+    Holds when deelnemer-type([Deelnemer], "Privaat klein")
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+Duty commons-moeten-commercieel-zijn
+    Holder aanbieder
+    Claimant [Ecoraad]
+    Related to aanbod
+    // Het geldt voor elke partij die iets als commercieel beschikbaar kan stellen én iets aanbiedt
+    // als Commons
+    Holds when (
+        deelnemer-privaat(aanbieder)
+        && aanbod.aanbieder == aanbieder
+        && aanbod-als-commons(aanbod)
+    )
+    // De Duty is geschonden als wat er aangeboden is, geen Commons is.
+    Violated when Not(aanbod-commercieel-beschikbaar(aanbod))
+
+
+
+/// We stellen dat in de jaren 2023 onwards, er géén Commons budget van meer dan 2500 euro mag
+/// zijn.
+Invariant maximaal-artikel-zeven-drie-commons-budget
+    When (Forall commons-budget:
+        // Het mag als het een ouder budget is,
+        commons-budget.jaar < 2023
+        || commons-budget.int <= 250000
+    )
+
+
+
+
+
+///// EINDE /////
+.

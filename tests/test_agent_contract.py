@@ -10,7 +10,6 @@ from agents.contract import (
     Capability,
     InProcessAgent,
 )
-from agents.contract.models import JobStatus
 from agents.contract.registry import RegistryError
 import pytest
 

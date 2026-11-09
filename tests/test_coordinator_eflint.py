@@ -134,7 +134,7 @@ def test_missing_inputs_are_requested_with_helpful_names(tmp_path):
     assert resp.needs_input and "qualification rules" in resp.reply
     assert "Process transitions: begin, finish." in resp.reply
     assert "eFLINT acts/events: register." in resp.reply
-    assert service.submitted[0]["operation"] == "validate"  # only the name probe ran
+    assert service.submitted == []  # transition names are computed locally: no service call, no run
 
     nothing = coord.handle_message(USER, "Verify the process against the eFLINT norms")
     assert nothing.needs_input and "a process model" in nothing.reply and "an eFLINT specification" in nothing.reply

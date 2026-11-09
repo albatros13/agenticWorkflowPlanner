@@ -15,6 +15,6 @@ class NoOpSemanticCache(SemanticProjectCache):
         return None
 
     def find_similar(
-        self, query: str, *, user_id: str | None = None, k: int = 5, min_score: float = 0.0
+        self, query: str, *, user_id: str | None = None, k: int = 5
     ) -> list[SimilarProject]:
         return []

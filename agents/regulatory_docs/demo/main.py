@@ -16,6 +16,7 @@ coordinator instead.
 """
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -72,11 +73,19 @@ def upload(req: UploadRequest) -> dict:
     return _run(UPLOAD_DOCUMENT, {"text": req.text, "title": req.title or None})
 
 
+# Uploads are read into memory; refuse anything larger (override with REGDOCS_MAX_UPLOAD_BYTES).
+MAX_UPLOAD_BYTES = int(os.getenv("REGDOCS_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+_UPLOAD = File(...)
+
+
 @app.post("/api/upload_file")
-def upload_file(file: UploadFile = File(...)) -> dict:
+def upload_file(file: UploadFile = _UPLOAD) -> dict:
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File exceeds the {MAX_UPLOAD_BYTES}-byte upload limit.")
     suffix = Path(file.filename or "document.md").suffix or ".md"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(file.file.read())
+        tmp.write(data)
         tmp_path = tmp.name
     try:
         return _run(UPLOAD_DOCUMENT, {"path": tmp_path, "title": file.filename or None})

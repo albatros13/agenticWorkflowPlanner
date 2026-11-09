@@ -13,7 +13,7 @@ from agents.regulatory_docs.agent import (
     VECTORIZE_DOCUMENT,
     RegulatoryDocsHandler,
 )
-from agents.regulatory_docs.config import EmbeddingConfig, QdrantConfig, VectorizationConfig
+from agents.regulatory_docs.config import EmbeddingConfig, VectorizationConfig
 from agents.regulatory_docs.embeddings import build_embedder
 from agents.regulatory_docs.library import DocumentLibrary
 from agents.regulatory_docs.qdrant_store import QdrantDocumentStore, summarize_documents

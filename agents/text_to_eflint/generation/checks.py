@@ -202,7 +202,7 @@ def _check_expr(ctx: _Ctx, types: dict[str, TypeInfo], e: Expr | None, scope: di
             if len(x.args) != len(info.params):
                 expected = ", ".join(v for v, _ in info.params)
                 ctx.err("arity", f"{what}: {x.name} takes {len(info.params)} argument(s) ({expected}), got {len(x.args)}", el)
-            for a, (_v, p) in zip(x.args, info.params):
+            for a, (_v, p) in zip(x.args, info.params, strict=False):  # arity reported above
                 at = arg_type(a, local)
                 if at is None or at == p:
                     continue

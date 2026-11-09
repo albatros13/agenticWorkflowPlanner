@@ -117,7 +117,7 @@ KEYWORDS = {
     "Fact", "Act", "Duty", "Event", "Identified", "by", "Holds", "when", "Actor", "Recipient",
     "Related", "to", "Creates", "Terminates", "Holder", "Claimant", "Violated", "Enabled",
     "Exists", "Forall", "True", "False", "Conditioned", "Derived", "from", "String", "Int",
-    "Count", "Sum", "Max", "Min", "Foreach", "When", "Where", "Not", "Present", "Extend", "Event",
+    "Count", "Sum", "Max", "Min", "Foreach", "When", "Where", "Not", "Present", "Extend",
 }
 _CMP_OPS = ("==", "!=", "<", "<=", ">", ">=")
 

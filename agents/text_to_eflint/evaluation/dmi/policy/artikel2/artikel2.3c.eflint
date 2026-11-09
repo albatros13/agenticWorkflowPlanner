@@ -1,0 +1,34 @@
+//ARTIKEL 2.3c.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **2.3** Deelname aan het DMI-ecosysteem geeft het recht op:
+//   > [...]
+//   > c) het gebruik van de Producten- en Dienstencatalogus voor publicatie
+//   >    van aangeboden en gevraagde producten, diensten, kennis,
+//   >    databestanden en -bronnen;
+//   > [...]
+//   
+//   Dit Artikel handhaaft dus alleen clausule `c)`.
+
+#require "./artikel2.1.eflint".
+
+
+///// HANDHAVING /////
+/// Dit artikel maakt alleen de link met de transactieflow.
+Extend Act maak-aanbod
+    Conditioned by deelnemer-lid-op(aanbieder, datum)
+Extend Act reageer
+    Conditioned by deelnemer-lid-op(afnemer, datum)
+Extend Act onderteken
+    Conditioned by deelnemer-lid-op([Deelnemer], datum)
+Extend Act neem-af
+    Conditioned by deelnemer-lid-op(afnemer, datum)
+
+
+
+
+
+///// EINDE /////
+.

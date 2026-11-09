@@ -1,7 +1,7 @@
 """Versioned request/response contract shared by every agent (local or remote).
 
 Kept intentionally small and explicit (REST+JSON). The manifest shape is close to an
-A2A "agent card" so migrating to a standard later stays cheap (COORDINATOR_PLAN sec 4).
+A2A "agent card" so migrating to a standard later stays cheap.
 """
 from __future__ import annotations
 

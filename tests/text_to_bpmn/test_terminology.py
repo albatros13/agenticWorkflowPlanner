@@ -1,5 +1,5 @@
 """Guideline Step 5: normalization annotates but never alters clinical meaning."""
-from agents.text_to_bpmn.pipeline.ir.enums import ElementType, GatewayKind, Uncertainty
+from agents.text_to_bpmn.pipeline.ir.enums import ElementType
 from agents.text_to_bpmn.pipeline.ir.models import Element, Process, Threshold
 from agents.text_to_bpmn.pipeline.terminology.models import MatchType
 from agents.text_to_bpmn.pipeline.terminology.resolver import TerminologyResolver

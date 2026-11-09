@@ -45,6 +45,8 @@ class VectorStore(Protocol):
 
     def upsert(self, points: list[dict[str, Any]]) -> int: ...
 
+    def delete_document(self, doc_id: str) -> None: ...
+
     def count(self) -> int: ...
 
     def list_documents(self) -> list[dict[str, Any]]: ...
@@ -60,8 +62,8 @@ _SCROLL_PAGE = 256
 def summarize_documents(payloads: Any) -> list[dict[str, Any]]:
     """Group chunk payloads by ``doc_id`` into ``{doc_id, title, source_document, chunks}``."""
     docs: dict[str, dict[str, Any]] = {}
-    for payload in payloads:
-        payload = payload or {}
+    for raw in payloads:
+        payload = raw or {}
         doc_id = payload.get("doc_id")
         if not doc_id:
             continue
@@ -86,7 +88,7 @@ class QdrantDocumentStore:
         self._collection = collection
 
     def ensure_collection(self, *, dimension: int, distance: str = "cosine", recreate: bool = False) -> None:
-        from qdrant_client.models import Distance, VectorParams  # noqa: PLC0415 - optional dep
+        from qdrant_client.models import Distance, PayloadSchemaType, VectorParams  # noqa: PLC0415 - optional dep
 
         dist = Distance[_DISTANCES.get(distance.lower(), "COSINE")]
         params = VectorParams(size=dimension, distance=dist)
@@ -96,6 +98,10 @@ class QdrantDocumentStore:
             exists = False
         if not exists:
             self._client.create_collection(self._collection, vectors_config=params)
+        # Filtering by doc_id (delete_document) needs a keyword index on cloud clusters; creating
+        # an existing index is a no-op, so this also upgrades collections made before it existed.
+        self._client.create_payload_index(self._collection, field_name="doc_id",
+                                          field_schema=PayloadSchemaType.KEYWORD)
 
     def upsert(self, points: list[dict[str, Any]]) -> int:
         from qdrant_client.models import PointStruct  # noqa: PLC0415 - optional dep
@@ -105,6 +111,15 @@ class QdrantDocumentStore:
         ]
         self._client.upsert(self._collection, points=structs)
         return len(structs)
+
+    def delete_document(self, doc_id: str) -> None:
+        """Remove every chunk of ``doc_id`` (re-vectorizing must not leave stale chunks behind)."""
+        from qdrant_client.models import FieldCondition, Filter, FilterSelector, MatchValue  # noqa: PLC0415
+
+        if not self._client.collection_exists(self._collection):
+            return
+        self._client.delete(self._collection, points_selector=FilterSelector(filter=Filter(
+            must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))])))
 
     def count(self) -> int:
         return int(self._client.count(self._collection, exact=True).count)

@@ -11,7 +11,7 @@ from __future__ import annotations
 from lxml import etree
 
 from ..bpmn.model import DecisionSpec
-from ..bpmn.namespaces import DMN, DMN_NSMAP, DMN_TARGET_NS, d, tostring
+from ..bpmn.namespaces import DMN_NSMAP, DMN_TARGET_NS, d, tostring
 
 
 def _feel_string(label: str) -> str:

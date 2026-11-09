@@ -11,7 +11,7 @@ diagrams can be viewed without generating again.
 This endpoint is now a thin back-compat shim over the ``text_to_bpmn`` agent
 (``agents/text_to_bpmn``): it selects the provider and delegates to
 :class:`~agents.text_to_bpmn.agent.TextToBpmnHandler`, which runs the unchanged pipeline.
-New clients should talk to the coordinator instead (see ``todo/COORDINATOR_PLAN.md``).
+New clients should talk to the coordinator instead (see ``docs/planning-instructions/coordinator/IMPLEMENTATION_PLAN.md``).
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def generate(req: GenerateRequest) -> dict:
     try:
         provider = _select_provider(settings)
     except LLMError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     handler = TextToBpmnHandler(provider=provider, settings=settings)
     result = handler.handle(
@@ -76,7 +76,7 @@ def run(run_id: str) -> dict:
     try:
         return load_run(run_id)
     except RunNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/health")

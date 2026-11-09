@@ -45,13 +45,6 @@ class Document(BaseModel):
     text: str                  # full raw text (kept for hashing/audit)
     blocks: list[Block] = Field(default_factory=list)
 
-    def section_paths(self) -> list[str]:
-        seen: list[str] = []
-        for b in self.blocks:
-            if b.location.section and b.location.section not in seen:
-                seen.append(b.location.section)
-        return seen
-
 
 class DocumentLoader(abc.ABC):
     """Abstraction over input formats (Step 2: "support PDF/text through an abstraction")."""

@@ -11,20 +11,38 @@ import os
 from .pipeline.config import Settings
 from .pipeline.llm.base import LLMProvider
 from .pipeline.llm.factory import get_provider
+from .pipeline.validation.schema import check_connectivity, validate_bpmn, validate_dmn
 
 
 def select_provider(settings: Settings) -> LLMProvider:
     """Pick a real (api-backed) provider from configuration.
 
     Resolution order: an explicit ``LLM_PROVIDER`` env override, then the configured
-    ``settings.llm_provider``, then auto-detection from whichever API key is present.
-    ``mock`` is never auto-resolved (tests inject :class:`ScriptedLLMProvider` directly).
+    ``settings.llm_provider``; anything other than ``anthropic`` / ``openai`` (unset, ``auto``,
+    ``mock``) auto-detects from whichever API key is present. ``mock`` is never auto-resolved
+    (tests inject :class:`ScriptedLLMProvider` directly).
     """
     name = (os.getenv("LLM_PROVIDER") or settings.llm_provider or "").lower()
-    if name in ("anthropic", "openai", "auto"):
-        return get_provider(settings, provider=name)
-    # Unset or "mock": fall back to key-based auto-detection for real calls.
-    return get_provider(settings, provider="auto")
+    return get_provider(settings, provider=name if name in ("anthropic", "openai") else "auto")
+
+
+def default_provider() -> LLMProvider:
+    """The provider every agent uses when none is injected: :func:`select_provider` on the
+    environment (``.env`` included)."""
+    return select_provider(Settings.from_env())
+
+
+def build_validation(bpmn_xml: str, dmn_xml: str | None) -> dict:
+    """Schema + connectivity checks of a generated model, in the agent's output shape."""
+    vb, cc = validate_bpmn(bpmn_xml), check_connectivity(bpmn_xml)
+    vd = validate_dmn(dmn_xml) if dmn_xml else None
+    return {
+        "bpmn_valid": vb.ok,
+        "bpmn_errors": vb.errors[:5],
+        "dmn_valid": vd.ok if vd else None,
+        "connectivity_ok": cc.ok,
+        "connectivity_errors": cc.errors[:5],
+    }
 
 
 def build_resources(evidence, process, annotations, model) -> dict:
@@ -44,7 +62,7 @@ def build_resources(evidence, process, annotations, model) -> dict:
                 "status": el.status.value,
                 "gateway_kind": el.gateway_kind.value if el.gateway_kind else None,
                 "thresholds": [
-                    f"{t.measure} {t.operator} {t.value}{t.value_high and ('..' + str(t.value_high)) or ''}"
+                    f"{t.measure} {t.operator} {t.value}{'' if t.value_high is None else '..' + str(t.value_high)}"
                     f"{(' ' + t.unit) if t.unit else ''}"
                     for t in el.thresholds
                 ],

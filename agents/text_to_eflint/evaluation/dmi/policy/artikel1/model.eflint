@@ -1,0 +1,151 @@
+// MODEL.eflint
+//   door Tim Müller
+//
+// Beschrijving:
+//   Beschrijft het basismodel waar we de artikelen aan ophangen.
+//
+//   Dit is niet officieel deel van Artikel 1, maar vormt een deel wat nog
+//   steeds basisbegrippen vormt van de formalisatie.
+//
+
+#require "./entiteiten.eflint".
+#require "./pdd.eflint".
+#require "./tijd.eflint".
+
+
+///// DATA TYPES /////
+/// Representeert een ID voor een aanbod.
+Fact id Identified by String
+
+
+
+
+
+///// HANDDRUK - BOEKHOUDING /////
+/// Geeft aan dat er een andere Data Provider is dan Entitled Party.
+///
+/// Dit feit benoemt dan wie de Data Provider is, en de `aanbieder` in `aanbod` wie de Entitled
+/// Party is.
+Fact aanbod-provider Identified by aanbod * provider
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach aanbod-provider: aanbod-provider.provider)
+
+
+
+/// Stelt dat één van de twee partijen betrokken bij een overeenkomst heeft ondertekend.
+///
+/// Je hoeft dit feit niet te geven. Je kunt ook direct een `overeenkomst` aanmaken.
+Fact deelnemer-ondertekend Identified by [Deelnemer] * reactie
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach deelnemer-ondertekend: deelnemer-ondertekend.[Deelnemer])
+Extend Fact reactie
+    Derived from (Foreach deelnemer-ondertekend: deelnemer-ondertekend.reactie)
+
+
+
+/// Representeert een aanbod in de PDC.
+///
+/// Dit is nog niet gerelateerd aan enige afnemer.
+Fact aanbod Identified by id * aanbieder * [PDD] * jaar
+
+Extend Fact id
+    Derived from (Foreach aanbod: aanbod.id)
+Extend Fact [Deelnemer]
+    Derived from (Foreach aanbod: aanbod.aanbieder)
+Extend Fact [PDD]
+    Derived from (Foreach aanbod: aanbod.[PDD])
+
+
+
+/// Representeert een reactie op een aanbod.
+///
+/// Op dit punt komt er een afnemer kijken die een voorstel tot afname doet.
+Fact reactie Identified by id * afnemer * aanbod
+
+Extend Fact id
+    Derived from (Foreach reactie: reactie.id)
+Extend Fact [Deelnemer]
+    Derived from (Foreach reactie: reactie.afnemer)
+Extend Fact aanbod
+    Derived from (Foreach reactie: reactie.aanbod)
+
+
+
+/// Representeert een overeenkomst gesloten aan de hand van een reactie.
+Fact overeenkomst Identified by reactie
+    Holds when deelnemer-ondertekend(reactie.aanbod.aanbieder, reactie) && deelnemer-ondertekend(reactie.afnemer, reactie)
+
+Extend Fact reactie
+    Derived from (Foreach overeenkomst: overeenkomst.reactie)
+
+
+
+/// Representeert een transactie gedaan op basis van een overeenkomst.
+Fact transactie Identified by id * provider * overeenkomst
+
+Extend Fact id
+    Derived from (Foreach transactie: transactie.id)
+Extend Fact [Deelnemer]
+    Derived from (Foreach transactie: transactie.provider)
+Extend Fact overeenkomst
+    Derived from (Foreach transactie: transactie.overeenkomst)
+
+
+
+
+
+///// HANDDRUK - TRANSITIES /////
+/// Actie om iets aan te bieden in de PDC.
+Act maak-aanbod
+    Actor aanbieder
+    Related to id, [PDD], datum
+    Holds when True
+    // Creeërt een nieuw aanbod
+    Creates aanbod(id, aanbieder, [PDD], datum.jaar)
+
+
+
+/// Actie om in te gaan op een aanbod in de PDC.
+Act reageer
+    Actor afnemer
+    Related to id, aanbod, datum
+    Holds when aanbod
+    // Creeërt een nieuw aanbod
+    Creates reactie(id, afnemer, aanbod)
+
+
+
+/// Actie om een overeenkomst te sluiten in de PDC.
+Act onderteken
+    Actor [Deelnemer]
+    Related to reactie, datum
+    // De Deelnemer moet een van de twee partijen zijn
+    Holds when reactie && reactie.aanbod.aanbieder == [Deelnemer]
+    Holds when reactie && reactie.afnemer == [Deelnemer]
+    // Creeërt het feit dat een helft heeft ondertekend.
+    Creates deelnemer-ondertekend([Deelnemer], reactie)
+
+
+
+/// Doet een afname namens een overeenkomst.
+Act neem-af
+    Actor afnemer
+    Recipient provider
+    Related to id, overeenkomst, datum
+    // Het moeten wel de partijen zijn van de overeenkomst
+    Holds when (
+        overeenkomst
+        && (aanbieder == overeenkomst.reactie.aanbod.aanbieder || aanbod-provider(overeenkomst.reactie.aanbod, provider))
+        && afnemer == overeenkomst.reactie.afnemer
+    )
+    // Maak de transactie
+    Creates transactie(id, provider, overeenkomst)
+
+
+
+
+
+///// EINDE /////
+.

@@ -33,8 +33,8 @@ Other parts of the package:
   only). `AnthropicProvider` / `OpenAIProvider` are thin adapters over the repo-root `api/`
   package, and `ScriptedLLMProvider` is the offline mock used by the tests. `LLM_PROVIDER=auto`
   (default) picks a provider from whichever API key is set. The other agents reuse this layer.
-- `retrieval/`: an in-memory index and a Qdrant index over the chunks.
-- `content_provider.py`, `config.py`: content helpers and environment-backed settings.
+- `retrieval/`: an in-memory index over the chunks (Guideline Step 2 retrieval tests).
+- `config.py`: environment-backed settings and the dependency-free `.env` loader.
 
 ## Agent, service and demo
 

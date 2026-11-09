@@ -1,0 +1,20 @@
+// PRODUCTEN, DIENSTEN EN DATA(PRODUCTEN).eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Bepaald de dingen die worden aangeboden in de PDC.
+//
+
+
+///// FEITEN /////
+/// Definieert een algemeen ding (product, dienst of data(product)) dat verhandelt worden in de
+/// PDX.
+Fact [PDD] Identified by String.
+
+
+
+/// Definieert een subset van PDD's wat alleen over data gaat.
+Fact [Data] Identified by [PDD].
+
+Extend Fact [PDD]
+    Derived from (Foreach [Data]: [Data].[PDD]).

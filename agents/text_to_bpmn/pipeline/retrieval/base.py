@@ -34,6 +34,3 @@ class EvidenceIndex(abc.ABC):
 
     @abc.abstractmethod
     def search(self, query: str, k: int = 5) -> list[RetrievedChunk]: ...
-
-    def all_chunks(self) -> list[Chunk]:  # pragma: no cover - overridden as needed
-        raise NotImplementedError

@@ -4,7 +4,7 @@ Two implementations behind one :class:`IntentClassifier` protocol:
 
 * :class:`HeuristicIntentClassifier` — keyword rules, no network. Default so the coordinator
   (and its tests) run fully offline.
-* :class:`LLMIntentClassifier` — uses an :class:`~src.llm.base.LLMProvider` with *structured*
+* :class:`LLMIntentClassifier` — uses an :class:`~agents.text_to_bpmn.pipeline.llm.base.LLMProvider` with *structured*
   JSON output (never free prose that gets parsed), consistent with the rest of the pipeline.
 
 The LLM decides *classification*; the coordinator decides *control flow*.
@@ -12,9 +12,13 @@ The LLM decides *classification*; the coordinator decides *control flow*.
 from __future__ import annotations
 
 import abc
+import logging
 import re
+from functools import lru_cache
 
 from pydantic import BaseModel, Field
+
+log = logging.getLogger(__name__)
 
 # Canonical coordinator intents.
 NEW_PROJECT = "new_project"
@@ -52,9 +56,6 @@ INTENTS = [
 # A BPMN 2.0 document pasted into a chat message (optionally with an XML declaration).
 _BPMN_XML = re.compile(
     r"(?:<\?xml[^>]*\?>\s*)?<(?P<p>[\w.-]+:)?definitions\b.*?</(?P=p)?definitions\s*>", re.DOTALL)
-PETRI_NET_WORDS = ("petri", "pnml", "workflow net", "woped", "place/transition")
-VERIFY_WORDS = ("verify", "verification", "check", "comply", "complies", "compliant", "compliance",
-                "conform", "violat")
 _NORM_WORDS = re.compile(r"\be-?flint\b|\bnorm(?:s|ative)?\b|\bregulat\w*|\blegal\b|\blaws?\b|"
                          r"\bqualification\b", re.IGNORECASE)
 _BOUND = re.compile(r"\b(?:bound|max[_ -]?states|depth)\s*(?:of|=|:|is)?\s*(\d+)|\b(\d+)\s+steps\b",
@@ -62,7 +63,6 @@ _BOUND = re.compile(r"\b(?:bound|max[_ -]?states|depth)\s*(?:of|=|:|is)?\s*(\d+)
 
 # Artifacts for eFLINT verification, pasted as fenced code blocks (```eflint ... ```). The fence
 # language names the kind; unlabelled fences are recognised by their content.
-ATTACHMENT_KINDS = ("eflint", "qualification", "analysis", "pnml", "pn", "document")
 _FENCE_LANGS = {
     "document": "document", "doc": "document", "regulation": "document", "law": "document",
     "markdown": "document", "md": "document",
@@ -293,26 +293,26 @@ class HeuristicIntentClassifier(IntentClassifier):
         }
 
     def classify(self, text: str, *, context: dict | None = None) -> IntentResult:
-        t = text.lower().strip()
         slots: dict = {}
+        head = text.partition(":")[0]
+        # Project/verification commands are short. A long message is a process description even
+        # when it happens to contain "list", "status", "delete", "verify", ...
+        command = len(head.split()) <= _MAX_COMMAND_WORDS
 
-        def hit(*words: str) -> bool:
-            return any(w in t for w in words)
-
-        if _CAPABILITIES.search(text.partition(":")[0]):
+        if _CAPABILITIES.search(head):
             return IntentResult(intent=LIST_CAPABILITIES, confidence=0.8)
         for intent, pattern in self._named.items():
             if pattern.search(text):
                 return IntentResult(intent=intent, confidence=0.7)
 
         attached = (context or {}).get("attachments") or []
-        command = _classify_agent_command(text, attached)
-        if command is not None:
-            return command
+        agent_command = _classify_agent_command(text, attached)
+        if agent_command is not None:
+            return agent_command
 
         # Verification of the process against an eFLINT/normative specification. Checked before
         # the Petri net rule: "verify the Petri net against the eFLINT norms" is a verification.
-        if hit(*VERIFY_WORDS) and (_NORM_WORDS.search(text) or "eflint" in attached):
+        if _VERIFY.search(text) and (_NORM_WORDS.search(text) or "eflint" in attached):
             m = _BOUND.search(text)
             if m:
                 slots["max_states"] = int(m.group(1) or m.group(2))
@@ -320,37 +320,65 @@ class HeuristicIntentClassifier(IntentClassifier):
 
         # First: Petri net requests often embed a process description that would otherwise trip
         # the keyword rules below ("list", "status", "process", ...).
-        if hit(*PETRI_NET_WORDS):
+        if _PETRI.search(text):
             description = description_in_command(text)
             return IntentResult(intent=GENERATE_PETRI_NET,
                                 slots={"process_description": description} if description else {},
                                 confidence=0.8)
-        if hit("list", "show my projects", "my projects", "all projects"):
-            return IntentResult(intent=LIST_PROJECTS, confidence=0.8)
-        if hit("delete", "remove project", "discard project"):
-            return IntentResult(intent=DELETE_PROJECT, confidence=0.8)
-        if hit("find similar", "similar project", "existing project", "search project", "any project about"):
-            return IntentResult(intent=FIND_PROJECT, slots={"query": text}, confidence=0.7)
-        if hit("status", "what state", "where are we", "progress"):
-            return IntentResult(intent=PROJECT_STATUS, confidence=0.7)
-        if hit("open project", "continue project", "resume project", "switch to project"):
-            return IntentResult(intent=OPEN_PROJECT, confidence=0.7)
-        if hit("revise description", "update the description", "change the description", "edit description"):
-            return IntentResult(
-                intent=REVISE_DESCRIPTION,
-                slots={"process_description": text, "semantics_changed": hit("actor", "new goal", "risk", "data use")},
-                confidence=0.7,
-            )
-        if hit("verify", "verification", "compliance check", "review the model"):
-            return IntentResult(intent=VERIFY_MODEL, confidence=0.7)
-        if hit("new project", "start a project", "create a project", "start over"):
-            return IntentResult(intent=NEW_PROJECT, slots={"process_description": text}, confidence=0.7)
-        if hit("bpmn", "process", "workflow", "diagram", "model this", "engineer", "generate"):
+        if command:
+            if _LIST_PROJECTS.search(head):
+                return IntentResult(intent=LIST_PROJECTS, confidence=0.8)
+            # Destructive: the object must be named ("delete this project"), never inferred.
+            if _DELETE_PROJECT.search(head):
+                return IntentResult(intent=DELETE_PROJECT, confidence=0.8)
+            if _phrase("find similar", "similar project", "existing project", "search project",
+                       "any project about").search(head):
+                return IntentResult(intent=FIND_PROJECT, slots={"query": text}, confidence=0.7)
+            if _STATUS.search(head):
+                return IntentResult(intent=PROJECT_STATUS, confidence=0.7)
+            if _phrase("open project", "continue project", "resume project", "switch to project").search(head):
+                return IntentResult(intent=OPEN_PROJECT, confidence=0.7)
+            if _phrase("revise description", "revise the description", "update the description",
+                       "change the description", "edit description").search(head):
+                return IntentResult(
+                    intent=REVISE_DESCRIPTION,
+                    slots={"process_description": text,
+                           "semantics_changed": bool(_phrase("actor", "new goal", "risk", "data use").search(text))},
+                    confidence=0.7,
+                )
+            if _phrase("verify", "verification", "compliance check", "review the model").search(head):
+                return IntentResult(intent=VERIFY_MODEL, confidence=0.7)
+            if _phrase("new project", "start a project", "create a project", "start over").search(head):
+                return IntentResult(intent=NEW_PROJECT, slots={"process_description": text}, confidence=0.7)
+        if _phrase("bpmn", "process", "workflow", "diagram", "model this", "engineer", "generate").search(text):
             return IntentResult(intent=ENGINEER_PROCESS, slots={"process_description": text}, confidence=0.6)
         # A substantial free-text description with no command verbs -> treat as a process to engineer.
         if len(text.split()) >= 8:
             return IntentResult(intent=ENGINEER_PROCESS, slots={"process_description": text}, confidence=0.4)
         return IntentResult(intent=UNKNOWN, confidence=0.2)
+
+
+def _phrase(*phrases: str) -> re.Pattern:
+    """Whole-word, case-insensitive match of any of ``phrases`` ("list" must not match "specialist")."""
+    return _phrase_cached(phrases)
+
+
+@lru_cache(maxsize=None)
+def _phrase_cached(phrases: tuple[str, ...]) -> re.Pattern:
+    alternatives = "|".join(r"\s+".join(map(re.escape, p.split())) for p in phrases)
+    return re.compile(rf"\b(?:{alternatives})\b", re.IGNORECASE)
+
+
+_VERIFY = re.compile(r"\b(?:verif(?:y|ies|ied|ying|ication)|checks?|checked|checking|compl(?:y|ies|iant|iance)|"
+                     r"conform\w*|violat\w*)\b", re.IGNORECASE)
+_PETRI = re.compile(r"\bpetri\w*|\bpnml\b|\bworkflow[\s-]+nets?\b|\bwoped\b|\bplace/transition\b", re.IGNORECASE)
+_LIST_PROJECTS = re.compile(_LEAD + r"(?:list|show|display)\b(?:\s+[\w']+){0,3}?\s+projects?\b|"
+                            r"\b(?:my|all)\s+projects\b", re.IGNORECASE)
+_DELETE_PROJECT = re.compile(r"\b(?:delete|remove|discard|drop)\s+(?:(?:this|the|my|that|current|our)\s+)?"
+                             r"project\b", re.IGNORECASE)
+_STATUS = re.compile(_LEAD + r"(?:(?:what(?:'s|\s+is)\s+the\s+|show\s+(?:the\s+|me\s+the\s+)?)?(?:status|progress)\b|"
+                     r"what\s+state\b|where\s+are\s+we\b)|\bproject(?:'s)?\s+(?:status|state|progress)\b",
+                     re.IGNORECASE)
 
 
 _SYSTEM_HEADER = (
@@ -429,27 +457,72 @@ def _system_prompt(intents: list[str], descriptions: dict[str, str]) -> str:
 class LLMIntentClassifier(IntentClassifier):
     """``capabilities`` (from :meth:`AgentRegistry.capabilities`) limit the agent intents to the
     available agents and describe those without built-in guidance. Without them, every intent the
-    coordinator knows is offered."""
+    coordinator knows is offered.
 
-    def __init__(self, provider, capabilities: list | None = None):
+    The model's answer is untrusted input: an intent outside the offered set becomes ``unknown``
+    and slots of the wrong type are dropped. When the provider fails, the message is classified by
+    the heuristic ``fallback`` instead of failing the request.
+    """
+
+    def __init__(self, provider, capabilities: list | None = None,
+                 fallback: IntentClassifier | None = None):
         self._provider = provider
         if capabilities is None:
             intents, descriptions = list(INTENTS), {}
         else:
             descriptions = {c.intent: c.description for c in capabilities}
             intents = [*BUILTIN_INTENTS, *(i for i in descriptions if i not in BUILTIN_INTENTS)]
+        self._intents = set(intents)
         self._schema = _schema(intents)
         self._system = _system_prompt(intents, descriptions)
+        self._fallback = fallback or HeuristicIntentClassifier(
+            registered_intents=[i for i in intents if i not in INTENTS])
 
     def classify(self, text: str, *, context: dict | None = None) -> IntentResult:
         ctx = f"\nContext: {context}" if context else ""
-        result = self._provider.generate_json(
-            task="intent_classification",
-            system=self._system,
-            prompt=f"User message:\n{text}{ctx}",
-            schema=self._schema,
-        )
-        data = result.data
-        intent = data.get("intent", UNKNOWN)
-        slots = {k: v for k, v in data.items() if k != "intent"}
-        return IntentResult(intent=intent, slots=slots, confidence=1.0)
+        try:
+            result = self._provider.generate_json(
+                task="intent_classification",
+                system=self._system,
+                prompt=f"User message:\n{text}{ctx}",
+                schema=self._schema,
+            )
+        except Exception as exc:  # noqa: BLE001 - a classifier outage must not fail the request
+            log.warning("LLM intent classification failed, using the heuristic classifier: %s", exc)
+            return self._fallback.classify(text, context=context)
+        data = result.data if isinstance(result.data, dict) else {}
+        intent = data.get("intent")
+        if intent not in self._intents:
+            intent = UNKNOWN
+        return IntentResult(intent=intent, slots=_typed_slots(data, self._schema), confidence=1.0)
+
+
+def _typed_slots(data: dict, schema: dict) -> dict:
+    """The slots of ``data`` that match their declared JSON type (ints may arrive as strings)."""
+    slots: dict = {}
+    for key, raw in data.items():
+        spec = schema["properties"].get(key)
+        if key == "intent" or spec is None or raw is None:
+            continue
+        value = _coerce_slot(raw, spec)
+        if value is not None:
+            slots[key] = value
+    return slots
+
+
+def _coerce_slot(raw, spec: dict):
+    """``raw`` as the slot's JSON type, or None when it does not fit."""
+    kind = spec.get("type")
+    if kind == "integer":
+        if isinstance(raw, bool):
+            return None
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value >= spec.get("minimum", value) else None
+    if kind == "boolean":
+        return raw if isinstance(raw, bool) else None
+    if kind == "string":
+        return raw if isinstance(raw, str) else None
+    return raw

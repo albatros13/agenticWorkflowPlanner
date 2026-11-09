@@ -1,0 +1,11 @@
+// ARTIKEL 2.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Implementeert Artikel 2 van het Afsprakenstelsel, wat gaat over toetreding
+//   tot het Ecosysteem.
+// 
+
+// Importeer de subartikelen
+#require "./artikel2.1.eflint".
+#require "./artikel2.3c.eflint".

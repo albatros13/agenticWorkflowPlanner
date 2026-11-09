@@ -1,0 +1,95 @@
+// ARTIKEL 7.12.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.12** Aanwending van data voor een toepassing die strijdig is met (i)
+//   > wet- en regelgeving, (ii) de gebruikstoestemming die is verkregen van de
+//   > individu op wie de data betrekking heeft, dan wel (iii) de houder van de
+//   > data, is nimmer toegestaan, óók niet als Commons.
+//   
+//   We formaliseren dit artikel als dat er een aantal toezeggingen moet zijn
+//   gedaan door de Deelnemer dat ze niet een van de drie clausules hierboven
+//   schenden.
+//   
+//   De eerste clausule wordt hier expliciet gecheckt. De tweede laten we
+//   impliciet aan Artikel 3.1. De derde zullen we voor de zekerheid excliciet
+//   vragen.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaald dat de aanbieder heeft verklaard dat de aanwending volgens de
+/// aanbieder niet in strijd is met (i) wet- en regelgeving.
+Fact aanwending-niet-in-strijd-met-wet-en-regelgeving Identified by reactie
+
+
+
+/// Bepaald dat de aanbieder heeft verklaard dat het gebruik van de aangeboden
+/// PDD toestemming heeft van de houder van de data.
+Fact aanwending-goedgekeurd-door-houder Identified by reactie
+
+
+
+
+
+///// BOEKHOUDING /////
+// (Correct, deze bestaan alleen wat Haskell reasoner + projectie in non-quantifying clauses == bad)
+
+/// Houdt bij of er data is aangeboden in een overeenkomst.
+Fact overeenkomst-over-data Identified by overeenkomst
+    Holds when [Data](overeenkomst.reactie.aanbod.[PDD])
+
+
+
+/// Mirror van `aanwending-niet-in-strijd-met-wet-en-regelgeving` over overeenkomsten om projectie
+/// te dodgen.
+Fact aanwending-overeenkomst-niet-in-strijd-met-wet-en-regelgeving Identified by overeenkomst
+    Derived from (Foreach aanwending-niet-in-strijd-met-wet-en-regelgeving:
+        aanwending-overeenkomst-niet-in-strijd-met-wet-en-regelgeving(
+            overeenkomst(aanwending-niet-in-strijd-met-wet-en-regelgeving.reactie)
+        )
+        When overeenkomst(aanwending-niet-in-strijd-met-wet-en-regelgeving.reactie)
+    )
+
+
+
+/// Mirror van `aanwending-goedgekeurd-door-houder` over overeenkomsten om projectie
+/// te dodgen.
+Fact aanwending-overeenkomst-goedgekeurd-door-houder Identified by overeenkomst
+    Derived from (Foreach aanwending-goedgekeurd-door-houder:
+        aanwending-overeenkomst-goedgekeurd-door-houder(
+            overeenkomst(aanwending-goedgekeurd-door-houder.reactie)
+        )
+        When overeenkomst(aanwending-goedgekeurd-door-houder.reactie)
+    )
+
+
+
+
+
+///// NORMATIEVE LINKS /////
+Duty overeenkomst-moet-in-lijn-met-wet-en-regelgeving
+    Holder [Deelnemer]
+    Claimant [Ecoraad]
+    Related to overeenkomst
+    // De plicht geldt zodra er data is aangeboden
+    Holds when (
+        overeenkomst.reactie.aanbod.aanbieder == [Deelnemer]
+        || overeenkomst.reactie.afnemer == [Deelnemer]
+    )
+    Conditioned by overeenkomst-over-data(overeenkomst)
+    // De plicht is geschonden zodra de checks niet aanwezig zijn
+    Violated when (
+        Not(aanwending-overeenkomst-niet-in-strijd-met-wet-en-regelgeving(overeenkomst))
+        || Not(aanwending-overeenkomst-goedgekeurd-door-houder(overeenkomst))
+    )
+
+
+
+
+
+///// EINDE /////
+.

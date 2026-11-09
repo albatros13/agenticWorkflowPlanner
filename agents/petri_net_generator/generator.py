@@ -5,12 +5,12 @@ Kept free of transport concerns so it is testable without the HTTP service or th
 from __future__ import annotations
 
 import json
-import uuid
 from pathlib import Path
 from typing import Callable
 
 from pydantic import ValidationError
 
+from agents.runs import new_run_id
 from agents.text_to_bpmn.pipeline.llm.base import LLMError, LLMProvider
 
 from .bpmn_converter import BpmnConversionError, bpmn_to_petri_net
@@ -135,7 +135,7 @@ def generate(
 
     pnml = to_pnml(net, im, fm)
     if runs_dir is not None:
-        run_id = uuid.uuid4().hex[:12]
+        run_id = new_run_id()
         run = runs_dir / run_id
         run.mkdir(parents=True, exist_ok=True)
         (run / "net.pnml").write_text(pnml, encoding="utf-8")

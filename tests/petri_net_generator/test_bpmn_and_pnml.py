@@ -88,7 +88,7 @@ def test_missing_start_and_end_events():
 @pytest.mark.parametrize("xml, code", [
     ("<definitions><process>", "malformed_xml"),
     ('<?xml version="1.0"?><!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
-     f'<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">&x;</definitions>', "dtd_not_allowed"),
+     '<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">&x;</definitions>', "dtd_not_allowed"),
     ("<notbpmn/>", "not_bpmn"),
 ])
 def test_unsafe_or_invalid_xml_is_rejected(xml, code):

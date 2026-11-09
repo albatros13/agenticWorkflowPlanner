@@ -1,0 +1,56 @@
+// TIJD.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Definieert een global definitie van tijd, vooral op het gebied van jaren en/of datums.
+//
+
+
+///// DEFINITIES /////
+/// Stelt `jaar`en gelijk aan nummers.
+Placeholder jaar For int.
+/// Stelt `maand`en gelijk aan nummers.
+Placeholder maand For int.
+/// Stelt `dag`en gelijk aan nummers.
+Placeholder dag For int.
+
+
+
+/// Beschrijft een specifieke datum.
+/// 
+/// Gegeven als: `datum(<JAAR>, <MAAND>, <DAG>)`.
+Fact datum Identified by jaar * maand * dag.
+
+Extend Fact int
+    Derived from (Foreach datum: datum.jaar)
+    Derived from (Foreach datum: datum.maand)
+    Derived from (Foreach datum: datum.dag).
+
+
+
+
+
+///// FUNCTIES /////
+/// Houdt bij of een datum hetzelfde- óf later is als een tweede datum.
+Fact datum-later-dan Identified by datum1 * datum2
+    // Yet again, Haskell thwarts us. We can't write multiple disjunctions in a row; so we fall
+    // back to multiple `Holds when`s to encode it instead.
+    Holds when datum1.jaar > datum2.jaar
+    Holds when datum1.jaar == datum2.jaar && datum1.maand > datum2.maand
+    Holds when (datum1.jaar == datum2.jaar && datum1.maand == datum2.maand && datum1.dag > datum2.dag).
+
+/// Houdt bij of een datum hetzelfde- óf later is als een tweede datum.
+Fact datum-op-of-later-dan Identified by datum1 * datum2
+    Holds when datum1 == datum2
+    Holds when datum-later-dan(datum1, datum2).
+
+/// Houdt bij of er minimaal een jaar tussen twee datums zit.
+/// 
+/// In het specifiek: controleert of `datum1` jaar later is dan `datum2` + 1 jaar.
+Fact datum-een-jaar-later-dan Identified by datum1 * datum2
+    // Yet again, Haskell thwarts us. We can't write multiple disjunctions in a row; so we fall
+    // back to multiple `Holds when`s to encode it instead.
+    Holds when datum1.jaar > (datum2.jaar + 1)
+    Holds when datum1.jaar == (datum2.jaar + 1) && datum1.maand > datum2.maand
+    // NOTE: Check this sneaky bastard here. The last day must **also** be inclusive, because we'd say that 2025-1-1 is exactly a year later than 2024-1-1
+    Holds when (datum1.jaar == (datum2.jaar + 1) && datum1.maand == datum2.maand && datum1.dag >= datum2.dag).

@@ -1,0 +1,79 @@
+// PASS DATA TRANSACTION (EN).eflint
+//   by Tim Müller
+// 
+// Description:
+//   A file showcasing how to call the entire Afsprakenstelsel such that it
+//   passes _and_ all checks are being executed.
+//   
+//   This version shows the policy for a transaction that does not involve
+//   Commons, but _is_ about Data, which unlocks some additional policy.
+// 
+
+// (NOTE: If you're appending, then replace this line with the contents of the entire policy. This
+//  line just tells the reasoner to do it for you.)
+#require "../../afsprakenstelsel.eflint".
+
+
+///// SCENARIO /////
+// First, declare the "technical world" of the policy
+{
+    +id("a1"). +id("r1"). +id("t1").
+    +[PDD]("AppelData"). +[Data]("AppelData").
+    +datum(2025, 10, 1).
+}
+
+// Then we declare participants
+{
+    +[Deelnemer]("Amy"). +deelnemer-type("Amy", "Privaat groot").
+    +[Deelnemer]("Bob"). +deelnemer-type("Bob", "Privaat klein").
+}
+
+
+
+// Now let's satisfy some policy so that Amy can start to make offers.
+{
+    // Article 2.1 & 2.3c: We must declare that they are legal participants
+    +deelnemer-toegetreden("Amy", datum(2025, 10, 1)).
+    +deelnemer-toegetreden("Bob", datum(2025, 10, 1)).
+
+    // Article 7.2: They must have offered something on Commons before- or on the day of doing a
+    // transaction.
+    +deelnemer-heeft-commons-aangeboden("Amy", datum(2025, 10, 1)).
+    +deelnemer-heeft-commons-aangeboden("Bob", datum(2025, 10, 1)).
+
+    // Rating hook: we define the ratings of the participants
+    +deelnemer-rating("Amy", "D").
+    +deelnemer-rating("Bob", "C").
+}
+
+
+
+// Amy puts her data on Apples on offer for 100000 cents (1000 euros).
+maak-aanbod("Amy", "a1", "AppelData", datum(2025, 10, 1)).
++prijs(aanbod("a1", "Amy", "AppelData", 2025), 100000).
+
+// Bob responds to it, altering the deal a little: after bartering, the price is lower
+reageer("Bob", "r1", aanbod("a1", "Amy", "AppelData", 2025), datum(2025, 10, 1)).
++afgesproken-prijs(reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025)), 50000).
+
+
+
+// We inject the process with more facts now that the `reactie`-fact is available
+{
+    // Article 7.12: Even though it isn't (sensitive) data, there's still some promises to make.
+    +aanwending-niet-in-strijd-met-wet-en-regelgeving(reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025))).
+    +aanwending-goedgekeurd-door-houder(reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025))).
+}
+
+
+
+// The parties sat down and tweaked the proposal. Now everyone agrees.
+onderteken(Amy, reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025)), datum(2025, 10, 1)).
+onderteken(Bob, reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025)), datum(2025, 10, 1)).
+
+// Now Bob starts consumin'
+neem-af(Bob, Amy, "t1", overeenkomst(reactie("r1", Bob, aanbod("a1", Amy, AppelData, 2025))), datum(2025, 10, 1)).
+
+
+
+// No violation!! Policy passed!!

@@ -18,17 +18,36 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from agents.storage import is_safe_id
+
 from .coordinator import Coordinator, CoordinatorResponse
 from .factory import build_coordinator
 from .projects.store import ProjectNotFoundError
 
 app = FastAPI(title="Coordinator agent")
-_coordinator: Coordinator = build_coordinator()
+# Built on first use, not at import: importing the module (tests, tooling) must not construct every
+# agent and read every config. Tests may assign a ready-made coordinator here.
+_coordinator: Coordinator | None = None
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-# Single-user default until real auth is added (COORDINATOR_PLAN open question 3).
+# Single-user default until real auth is added.
 DEFAULT_USER = os.getenv("DEFAULT_USER_ID", "default")
+
+
+def _get() -> Coordinator:
+    global _coordinator
+    if _coordinator is None:
+        _coordinator = build_coordinator()
+    return _coordinator
+
+
+def _user(user_id: str | None) -> str:
+    """The caller's user id; 400 when it is not a safe single path component (e.g. ``..``)."""
+    uid = user_id or DEFAULT_USER
+    if not is_safe_id(uid):
+        raise HTTPException(status_code=400, detail=f"invalid user id {uid!r}")
+    return uid
 
 
 class MessageRequest(BaseModel):
@@ -44,38 +63,30 @@ def health() -> dict:
 
 @app.post("/coordinator/message")
 def message(req: MessageRequest) -> CoordinatorResponse:
-    user_id = req.user_id or DEFAULT_USER
-    return _coordinator.handle_message(user_id, req.text, project_id=req.project_id)
+    return _get().handle_message(_user(req.user_id), req.text, project_id=req.project_id)
 
 
 @app.get("/coordinator/projects")
 def list_projects(user_id: str | None = None) -> dict:
-    refs = _coordinator.store.list(user_id or DEFAULT_USER)
+    refs = _get().store.list(_user(user_id))
     return {"projects": [r.model_dump() for r in refs]}
+
+
+def _project(uid: str, project_id: str):
+    try:
+        return _get().store.get(uid, project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/coordinator/projects/{project_id}")
 def get_project(project_id: str, user_id: str | None = None) -> dict:
-    try:
-        project = _coordinator.store.get(user_id or DEFAULT_USER, project_id)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    return project.model_dump(mode="json")
+    return _project(_user(user_id), project_id).model_dump(mode="json")
 
 
 @app.delete("/coordinator/projects/{project_id}")
 def delete_project(project_id: str, user_id: str | None = None) -> dict:
-    uid = user_id or DEFAULT_USER
-    try:
-        project = _coordinator.store.get(uid, project_id)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    # deleteProject is allowed from any state; go through the machine to stay consistent.
-    _coordinator.machine.apply(project.state, "deleteProject")
-    _coordinator.store.delete(uid, project_id)
-    _coordinator.cache.remove(project_id)
-    if _coordinator.handoff:
-        _coordinator.handoff.remove(project_id)
+    _get().delete_project(_project(_user(user_id), project_id))
     return {"deleted": project_id}
 
 

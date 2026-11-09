@@ -7,7 +7,7 @@ pipeline versions live here so artifacts can be keyed by them (Step 17).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # Bump these when behaviour changes so audit artifacts remain distinguishable.
@@ -21,16 +21,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # pipeline package so the agent is self-contained and deployable on its own.
 PIPELINE_ROOT = Path(__file__).resolve().parents[0]
 
-# Keys that must never be echoed into logs or LLM prompts.
-_SECRET_ENV_KEYS = frozenset(
-    {
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "QDRANT_API_KEY",
-        "REPLICATE_API_TOKEN",
-        "NEO4J_PWD",
-    }
-)
+# The single place the default models are defined (override with ANTHROPIC_MODEL / OPENAI_MODEL).
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_OPENAI_MODEL = "gpt-4o"
 
 
 def load_dotenv(path: Path | None = None, *, override: bool = False) -> None:
@@ -52,23 +45,13 @@ def load_dotenv(path: Path | None = None, *, override: bool = False) -> None:
             os.environ[key] = value
 
 
-def redact(env_key: str, value: str | None) -> str:
-    """Return a log-safe representation of a possibly-sensitive value."""
-    if value is None:
-        return "<unset>"
-    if env_key in _SECRET_ENV_KEYS:
-        return "<redacted>"
-    return value
-
-
 @dataclass(frozen=True)
 class Settings:
     """Runtime configuration resolved from the environment."""
 
     llm_provider: str = "mock"  # "mock" | "anthropic" | "openai" | "local"
-    anthropic_model: str = "claude-sonnet-4-6"
-    openai_model: str = "gpt-4o"
-    runs_dir: Path = field(default=REPO_ROOT / "runs")
+    anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
+    openai_model: str = DEFAULT_OPENAI_MODEL
     prompt_version: str = PROMPT_VERSION
     pipeline_version: str = PIPELINE_VERSION
 
@@ -77,7 +60,6 @@ class Settings:
         load_dotenv()
         return cls(
             llm_provider=os.getenv("LLM_PROVIDER", "mock"),
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            runs_dir=Path(os.getenv("RUNS_DIR", str(REPO_ROOT / "runs"))),
+            anthropic_model=os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
+            openai_model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
         )

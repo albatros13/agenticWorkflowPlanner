@@ -1,0 +1,52 @@
+// ARTIKEL 7.16.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.16** Aanbieding als Commons mag nimmer data betreffen waarvoor reeds
+//   > wettelijke verplichting geldt tot publicatie en/of gebruik onder
+//   > Europese of nationale wet- en regelgeving (zoals RTTI en de
+//   > ITS-Directive).
+// 
+//   We formaliseren dit Artikel dat, áls er informatie is dat een dataset
+//   onder een wettelijke verplichting valt, het niet zo mag zijn dat het is
+//   aangeboden als Commons.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaalt dat een data niet mag worden gepubliceerd als Commons vanwege wettelijke verplichtingen
+Fact data-heeft-strijdige-wettelijke-verplichting Identified by [Data]
+
+Extend Fact [Data] Derived from (Foreach data-heeft-strijdige-wettelijke-verplichting: data-heeft-strijdige-wettelijke-verplichting.[Data])
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+Duty data-met-wettelijke-verplichtingen-mag-geen-commons-zijn
+    Holder aanbieder
+    Claimant [Ecoraad]
+    Related to aanbod
+    // De plicht geldt wanneer de data onder wettelijke verplichtingen valt zoals in dit Artikel.
+    Holds when (
+        aanbod.aanbieder == aanbieder
+        && [Data](aanbod.[PDD])
+        && data-heeft-strijdige-wettelijke-verplichting([Data](aanbod.[PDD]))
+    )
+    // De plicht is geschonden zodra het aanbod als Commons wordt gepubliceerd óf afgenomen
+    Violated when aanbod-als-commons(aanbod)
+    Violated when (Exists reactie:
+        reactie.aanbod == aanbod
+        && reactie-als-commons(reactie)
+    )
+
+
+
+
+
+///// EINDE /////
+.

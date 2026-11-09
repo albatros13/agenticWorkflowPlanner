@@ -12,47 +12,15 @@ from __future__ import annotations
 import os
 import uuid
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from agents.contract import AgentRequest, AgentResult
-from agents.contract.models import Job, JobStatus
+from agents.contract import AgentRequest
+from agents.contract.service import make_agent_app
 
 from .agent import GENERATE_EFLINT, VALIDATE_EFLINT, TextToEflintHandler
 
-app = FastAPI(title="text_to_eflint agent")
 _handler = TextToEflintHandler()
-_jobs: dict[str, Job] = {}  # in-memory job table (artifacts persist under runs/)
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
-@app.get("/agent/manifest")
-def manifest() -> dict:
-    return _handler.manifest().model_dump()
-
-
-@app.post("/agent/invoke_sync")
-def invoke_sync(request: AgentRequest) -> AgentResult:
-    return _handler.handle(request)
-
-
-@app.post("/agent/invoke")
-def invoke(request: AgentRequest) -> Job:
-    job_id = uuid.uuid4().hex[:12]
-    result = _handler.handle(request)
-    status = JobStatus.succeeded if result.ok else JobStatus.failed
-    job = Job(job_id=job_id, status=status, result=result, error=result.error)
-    _jobs[job_id] = job
-    return job
-
-
-@app.get("/agent/jobs/{job_id}")
-def job_status(job_id: str) -> Job:
-    return _jobs.get(job_id, Job(job_id=job_id, status=JobStatus.failed, error="unknown job"))
+app = make_agent_app("text_to_eflint agent", lambda: _handler)  # shared contract endpoints
 
 
 def _direct(intent: str, payload: dict) -> JSONResponse:

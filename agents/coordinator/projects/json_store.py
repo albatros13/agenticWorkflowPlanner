@@ -6,22 +6,20 @@ temp-file rename. Mirrors the plain-JSON style of
 
 The default location is the coordinator's private storage (``config/storage.json``); the
 ``PROJECTS_DIR`` env var overrides it (used by tests/ops).
+
+User and project ids are validated (:func:`agents.storage.safe_id`), never rewritten: rewriting
+made distinct ids collide (``a/b`` and ``a_b``) and let ``..`` escape the store. An invalid user id
+raises ``ValueError``; an invalid project id cannot exist, so it is reported as not found.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
-from agents.storage import agent_storage
+from agents.storage import agent_storage, is_safe_id, safe_id
 
 from .models import Project, ProjectRef
 from .store import ProjectNotFoundError, ProjectStore
-
-
-def _safe(component: str) -> str:
-    """Keep ids/user-ids filesystem-safe (emails, uuids)."""
-    return "".join(c if c.isalnum() or c in "-_.@" else "_" for c in component)
 
 
 class JsonProjectStore(ProjectStore):
@@ -33,15 +31,16 @@ class JsonProjectStore(ProjectStore):
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _user_dir(self, user_id: str) -> Path:
-        d = self.root / _safe(user_id)
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+        return self.root / safe_id(user_id, "user id")
 
     def _path(self, user_id: str, project_id: str) -> Path:
-        return self._user_dir(user_id) / f"{_safe(project_id)}.json"
+        if not is_safe_id(project_id):
+            raise ProjectNotFoundError(f"Project {project_id!r} not found for {user_id!r}")
+        return self._user_dir(user_id) / f"{project_id}.json"
 
     def _write(self, project: Project) -> None:
         path = self._path(project.user_id, project.id)
+        path.parent.mkdir(parents=True, exist_ok=True)  # created on first write, never on reads
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(project.model_dump_json(indent=2), encoding="utf-8")
         os.replace(tmp, path)  # atomic on POSIX
@@ -63,14 +62,22 @@ class JsonProjectStore(ProjectStore):
         self._write(project)
         return project
 
-    def list(self, user_id: str) -> list[ProjectRef]:
+    def _projects(self, user_id: str) -> list[Project]:
         d = self._user_dir(user_id)
-        refs = [
-            Project.model_validate_json(p.read_text(encoding="utf-8")).ref()
-            for p in d.glob("*.json")
-            if not p.name.endswith(".json.tmp")
-        ]
+        if not d.is_dir():
+            return []
+        return [Project.model_validate_json(p.read_text(encoding="utf-8")) for p in d.glob("*.json")]
+
+    def list(self, user_id: str) -> list[ProjectRef]:
+        refs = [p.ref() for p in self._projects(user_id)]
         return sorted(refs, key=lambda r: r.updated_at, reverse=True)
+
+    def search(self, user_id: str, query: str) -> list[ProjectRef]:
+        """Substring search over name/description, reading each project file once."""
+        q = query.lower().strip()
+        hits = [p.ref() for p in self._projects(user_id)
+                if q in p.name.lower() or q in p.description.lower()]
+        return sorted(hits, key=lambda r: r.updated_at, reverse=True)
 
     def delete(self, user_id: str, project_id: str) -> None:
         path = self._path(user_id, project_id)

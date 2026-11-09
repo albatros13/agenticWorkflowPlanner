@@ -50,8 +50,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 # The agents/ tree holds all agent source, incl. the text->BPMN pipeline
-# (agents/text_to_bpmn/pipeline). app/ and api/ are run from the repo root, not installed.
-include = ["agents*"]
+# (agents/text_to_bpmn/pipeline). api/ holds the provider SDK calls the LLM adapters import, so it
+# must ship in the wheel too (an installed agent without it cannot call any LLM).
+include = ["agents*", "api*"]
 
 [tool.setuptools.package-data]
 # Ship the vendored FLINT ontology data (ttl/rq) + its license notices inside the wheel so
@@ -59,6 +60,8 @@ include = ["agents*"]
 "agents.text_to_eflint.flint" = ["data/**/*.ttl", "data/**/*.rq", "data/**/LICENSE", "VERSION", "LICENSE"]
 # Vendored reference eFLINT specification (MIT) used as few-shot example + golden tests.
 "agents.text_to_eflint.generation" = ["reference/*.eflint", "reference/scenarios/*.eflint", "reference/LICENSE", "reference/README.md"]
+# Vendored DMI Afsprakenstelsel formalisation (Apache-2.0): demo samples + generation-quality references.
+"agents.text_to_eflint.evaluation" = ["dmi/*.json", "dmi/LICENSE", "dmi/README.md", "dmi/policy/**/*.eflint"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

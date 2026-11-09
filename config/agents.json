@@ -1,5 +1,5 @@
 {
-  "$comment": "Agent registry manifest. Flip a sub-agent from in-process to a remote HTTP service by setting transport=http and base_url. See todo/COORDINATOR_PLAN.md sec 4.",
+  "$comment": "Agent registry manifest. Flip a sub-agent from in-process to a remote HTTP service by setting transport=http and base_url. See docs/planning-instructions/coordinator/IMPLEMENTATION_PLAN.md.",
   "agents": [
     {
       "name": "text_to_bpmn",

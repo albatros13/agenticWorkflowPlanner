@@ -1,0 +1,62 @@
+// ARTIKEL 7.13.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.13** Inzage en gebruik van producten, diensten en data als Commons
+//   > is altijd op basis van ‘non commercial use only’. Aanvullende
+//   > gebruiksrestricties om te kunnen voldoen aan artikel 3.1 kunnen van
+//   > toepassing zijn.
+//   
+//   Dit artikel wordt geformaliseerd als dat we een check verzamelen dat de
+//   afnemer beloofd dat ze Commons alleen voor non-commercial gebruik doen.
+//   
+//   De rest laten we afhandelen door artikel 3.1, zoals dit artikel stelt.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Stelt dat de afnemer beloofd heeft dat de afnames gedaan names de toekomstige overeenkomst
+/// alleen zullen worden aangewend voor non-commercial gebruik.
+Fact aanwending-alleen-voor-niet-commercieel-gebruik Identified by reactie
+
+
+
+
+
+///// BOEKHOUDING /////
+/// Mirror van `aanwending-alleen-voor-niet-commercieel-gebruik` voor overeenkomsten zodat de
+/// `Violated when`-clause beneden geen projectie hoeft te doen.
+/// 
+/// #JustHaskellReasonerThings
+Fact aanwending-overeenkomst-alleen-voor-niet-commercieel-gebruik Identified by overeenkomst
+    Derived from (Foreach aanwending-alleen-voor-niet-commercieel-gebruik:
+        aanwending-overeenkomst-alleen-voor-niet-commercieel-gebruik(overeenkomst(aanwending-alleen-voor-niet-commercieel-gebruik.reactie))
+        When overeenkomst(aanwending-alleen-voor-niet-commercieel-gebruik.reactie)
+    )
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+Duty commons-mag-niet-commercieel-afgenomen
+    Holder afnemer
+    Claimant [Ecoraad]
+    Related to overeenkomst
+    // De plicht geldt zodra er een Commonsafname wordt gedaan
+    Holds when (
+        overeenkomst.reactie.afnemer == afnemer
+        && reactie-als-commons(overeenkomst.reactie)
+    )
+    // De plicht is geschonden zodra er geen claim is dat ze dit niet-commercieel doen.
+    Violated when Not(aanwending-overeenkomst-alleen-voor-niet-commercieel-gebruik(overeenkomst))
+
+
+
+
+
+///// EINDE /////
+.

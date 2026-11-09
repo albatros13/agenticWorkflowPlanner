@@ -13,6 +13,11 @@ returns the specification, findings, scenario results and rendered ``.eflint`` f
 
 GET /api/runs lists the generations stored in the agent's storage (``runs/<run_id>/``) and
 GET /api/runs/{run_id} reopens one (same shape as /api/generate, plus the saved ``input``).
+
+GET /api/samples lists the regulatory text samples that come with a reference formalisation (the
+DMI Afsprakenstelsel, see ``agents/text_to_eflint/evaluation/dmi/README.md``);
+GET /api/samples/{id} returns one (text, application context, reference modules and example
+scenario) and POST /api/samples/{id}/compare compares a generated spec with its reference.
 """
 from __future__ import annotations
 
@@ -30,6 +35,11 @@ from agents.text_to_bpmn.pipeline.llm.base import LLMError, LLMProvider
 from agents.text_to_bpmn.shaping import select_provider
 from agents.contract import AgentRequest
 from agents.text_to_eflint.agent import GENERATE_EFLINT, TextToEflintHandler
+from agents.text_to_eflint.evaluation import qa
+from agents.text_to_eflint.evaluation.compare import compare
+from agents.text_to_eflint.evaluation.samples import (DMI_COMMIT, DMI_REPOSITORY, articles, get_sample,
+                                                      samples)
+from agents.text_to_eflint.generation import EflintSpec
 from agents.text_to_eflint.labelling import FlintFrameLabeller, role_dict_to_act_frame
 from agents.text_to_eflint.labelling.schema import ROLE_KEYS
 
@@ -92,13 +102,13 @@ def label(req: LabelRequest) -> dict:
     try:
         provider = _select_provider(settings)
     except LLMError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     language = (req.language or "en").lower()
     try:
         labeller = FlintFrameLabeller(provider, language=language)
     except ValueError as exc:  # unknown language / no few-shot examples
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     sentences = split_sentences(req.text)
     truncated = len(sentences) > MAX_SENTENCES
@@ -119,7 +129,7 @@ def label(req: LabelRequest) -> dict:
                 "has_act": bool(frame["action"]),
             })
     except LLMError as exc:
-        raise HTTPException(status_code=422, detail=f"Labelling failed: {exc}")
+        raise HTTPException(status_code=422, detail=f"Labelling failed: {exc}") from exc
 
     # Assemble the FLINT format from the frames we already computed (acts with a
     # non-empty action, matching frames_from_sentences' rule) — no extra LLM calls.
@@ -157,7 +167,7 @@ def generate(req: GenerateRequest) -> dict:
     try:
         provider = _select_provider(settings)
     except LLMError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     result = TextToEflintHandler(provider=provider).handle(
         AgentRequest(intent=GENERATE_EFLINT, payload=req.model_dump())
     )
@@ -182,7 +192,48 @@ def run(run_id: str) -> dict:
     try:
         return _store().load_run(run_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc.args[0]))
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+
+
+@app.get("/api/samples")
+def sample_list() -> dict:
+    items = [{"id": s.id, "title": s.title, "language": s.language, "articles": s.articles} for s in samples()]
+    return {"samples": items, "count": len(items)}
+
+
+def _sample(sample_id: str):
+    try:
+        return get_sample(sample_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+
+
+@app.get("/api/samples/{sample_id}")
+def sample_detail(sample_id: str) -> dict:
+    s = _sample(sample_id)
+    arts = articles()
+    return {
+        "id": s.id, "title": s.title, "language": s.language, "text": s.text,
+        "domain_context": s.domain_context,
+        "articles": [{"id": a, "source": arts[a].source, "module": arts[a].module} for a in s.articles],
+        "reference": {"files": s.reference_files(), "example": {"path": s.example, "source": s.example_source()}},
+        "provenance": {"repository": DMI_REPOSITORY, "commit": DMI_COMMIT, "license": "Apache-2.0"},
+    }
+
+
+class CompareRequest(BaseModel):
+    spec: dict
+
+
+@app.post("/api/samples/{sample_id}/compare")
+def sample_compare(sample_id: str, req: CompareRequest) -> dict:
+    s = _sample(sample_id)
+    try:
+        spec = EflintSpec.model_validate(req.spec)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"not a generated spec: {exc}") from exc
+    comparison = compare(spec, s.reference_files(), base=qa.base_sources(), articles=s.articles)
+    return {**comparison.summary(), "details": comparison.details()}
 
 
 @app.get("/api/health")

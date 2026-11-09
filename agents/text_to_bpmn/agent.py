@@ -1,24 +1,22 @@
 """The text->BPMN agent handler.
 
-Runs the existing pipeline exactly as the demo API did (ingest_text -> evidence -> interpret ->
-terminology -> compile_bpmn), then packages the result into an :class:`AgentResult`. The
-pipeline code in ``src/`` is not modified.
+Runs the staged pipeline (ingest_text -> evidence -> interpret -> terminology -> compile_bpmn),
+then packages the result into an :class:`AgentResult`.
 """
 from __future__ import annotations
 
-import uuid
 from typing import Callable
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
+from agents.runs import new_run_id
 
 from .pipeline.config import Settings
 from .pipeline.llm.base import LLMError, LLMProvider
 from .pipeline.pipeline.artifacts import ArtifactStore
 from .pipeline.pipeline.runner import Pipeline
-from .pipeline.validation.schema import check_connectivity, validate_bpmn, validate_dmn
 from .runs import runs_dir as default_runs_dir
-from .shaping import build_resources, select_provider
+from .shaping import build_resources, build_validation, select_provider
 
 ENGINEER_PROCESS = "engineer_process"
 
@@ -98,7 +96,7 @@ class TextToBpmnHandler(AgentHandler):
                 status=JobStatus.failed, error=str(exc),
             )
 
-        run_id = uuid.uuid4().hex[:12]
+        run_id = new_run_id()
         # Private per-agent output storage (config/storage.json); RUNS_DIR overrides for tests/ops.
         runs_dir = default_runs_dir()
         store = ArtifactStore.new_run(runs_dir, run_id)
@@ -116,23 +114,13 @@ class TextToBpmnHandler(AgentHandler):
                 artifacts_ref=run_id, error=f"{type(exc).__name__}: {exc}",
             )
 
-        vb = validate_bpmn(model.bpmn_xml)
-        vd = validate_dmn(model.dmn_xml) if model.dmn_xml else None
-        cc = check_connectivity(model.bpmn_xml)
-
         output = {
             "run_id": run_id,
             "provider": provider.name,
             "bpmn_xml": model.bpmn_xml,
             "dmn_xml": model.dmn_xml,
             "resources": build_resources(evidence, process, annotations, model),
-            "validation": {
-                "bpmn_valid": vb.ok,
-                "bpmn_errors": vb.errors[:5],
-                "dmn_valid": vd.ok if vd else None,
-                "connectivity_ok": cc.ok,
-                "connectivity_errors": cc.errors[:5],
-            },
+            "validation": build_validation(model.bpmn_xml, model.dmn_xml),
         }
         return AgentResult(
             agent="text_to_bpmn", intent=request.intent,

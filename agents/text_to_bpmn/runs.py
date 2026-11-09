@@ -16,20 +16,16 @@ diagram is still returned, the affected resources are left empty, and ``warnings
 from __future__ import annotations
 
 import json
-import os
-import re
 from pathlib import Path
 
-from agents.storage import agent_storage
+from agents.runs import is_run_id, runs_root
 
 from .pipeline.bpmn.model import build_graph
 from .pipeline.evidence.models import EvidenceSet
 from .pipeline.ir.models import Process
 from .pipeline.terminology.models import TerminologyAnnotation
-from .pipeline.validation.schema import check_connectivity, validate_bpmn, validate_dmn
-from .shaping import build_resources
+from .shaping import build_resources, build_validation
 
-_RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class RunNotFoundError(LookupError):
@@ -38,7 +34,7 @@ class RunNotFoundError(LookupError):
 
 def runs_dir() -> Path:
     """The agent's runs folder: ``RUNS_DIR`` if set, else ``storage/runs`` (config/storage.json)."""
-    return Path(os.environ["RUNS_DIR"]) if os.getenv("RUNS_DIR") else agent_storage("text_to_bpmn").path("runs")
+    return runs_root("text_to_bpmn", "RUNS_DIR")
 
 
 def _artifact(run: Path, name: str) -> dict | None:
@@ -53,7 +49,7 @@ def _artifact(run: Path, name: str) -> dict | None:
 
 
 def _run_path(run_id: str, root: Path | None) -> Path:
-    if not _RUN_ID.match(run_id or ""):
+    if not is_run_id(run_id):
         raise RunNotFoundError(f"invalid run id {run_id!r}")
     run = (root or runs_dir()) / run_id
     if not (run / "bpmn.json").is_file():
@@ -68,7 +64,7 @@ def list_runs(root: Path | None = None) -> list[dict]:
         return []
     rows = []
     for run in root.iterdir():
-        bpmn = _artifact(run, "bpmn") if _RUN_ID.match(run.name) else None
+        bpmn = _artifact(run, "bpmn") if is_run_id(run.name) else None
         if not bpmn:
             continue
         meta = bpmn.get("meta") or {}
@@ -129,8 +125,6 @@ def load_run(run_id: str, root: Path | None = None) -> dict:
         _Model(graph) if graph is not None else _Model(None),
     )
 
-    vb, cc = validate_bpmn(bpmn_xml), check_connectivity(bpmn_xml)
-    vd = validate_dmn(dmn_xml) if dmn_xml else None
     doc = (_artifact(run, "document") or {}).get("data") or {}
     return {
         "run_id": run.name,
@@ -138,13 +132,7 @@ def load_run(run_id: str, root: Path | None = None) -> dict:
         "bpmn_xml": bpmn_xml,
         "dmn_xml": dmn_xml,
         "resources": resources,
-        "validation": {
-            "bpmn_valid": vb.ok,
-            "bpmn_errors": vb.errors[:5],
-            "dmn_valid": vd.ok if vd else None,
-            "connectivity_ok": cc.ok,
-            "connectivity_errors": cc.errors[:5],
-        },
+        "validation": build_validation(bpmn_xml, dmn_xml),
         "stored": True,
         "saved_at": bpmn.get("saved_at", ""),
         "process_name": process.name if process is not None else "",

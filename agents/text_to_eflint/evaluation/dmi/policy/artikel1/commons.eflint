@@ -1,0 +1,62 @@
+// COMMONS.eflint
+//   door Tim Müller
+// 
+// Beschrijving
+//   Definieert concepten rond de Commons van Artikel 7.
+// 
+
+#require "./model.eflint".
+
+
+///// INPUT FEITEN /////
+/// Een aanbod is als Commons gedaan.
+Fact aanbod-als-commons Identified by aanbod
+
+
+
+/// Een aanbod gaat worden afgenomen als Commons.
+Fact reactie-als-commons Identified by reactie
+
+
+
+/// Beschrijft het huidige budget van een Deelnemer bij een andere Deelnemer.
+/// 
+/// (Het Commons-budget is peer-wise).
+Fact commons-budget Identified by afnemer * aanbieder * int * jaar
+
+Extend Fact [Deelnemer] Derived from (Foreach commons-budget: commons-budget.afnemer)
+Extend Fact [Deelnemer] Derived from (Foreach commons-budget: commons-budget.aanbieder)
+Extend Fact int Derived from (Foreach commons-budget: commons-budget.int)
+Extend Fact int Derived from (Foreach commons-budget: commons-budget.jaar)
+
+
+
+
+
+///// BOEKHOUDING /////
+/// Houdt bij dat alle overeenkomsten gesloten aan de hand van deze Commons-aanbieding, ook Commons betreffen.
+Fact alle-overeenkomsten-als-commons Identified by aanbod
+    Holds when aanbod-als-commons(aanbod)
+    Conditioned by (Forall overeenkomst:
+        overeenkomst.reactie.aanbod != aanbod
+        || reactie-als-commons(overeenkomst.reactie)
+    )
+
+
+
+
+
+///// ASSERTIES /////
+/// Laten we zeggen dat als je iets aanbiedt als Commons, je het ook zodanig moet afnemen.
+Invariant aangeboden-commons-afgenomen-als-commons
+    When (Forall aanbod:
+        Not(aanbod-als-commons(aanbod))
+        || alle-overeenkomsten-als-commons(aanbod)
+    )
+
+
+
+
+
+///// EINDE /////
+.

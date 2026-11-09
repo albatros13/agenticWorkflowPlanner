@@ -1,0 +1,121 @@
+// ARTIKEL 7.8.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.8** Een Deelnemer die na 1 januari van een kalenderjaar is
+//   > toegetreden heeft gedurende dat kalenderjaar de verplichting tot
+//   > levering van een pro rata Eurowaarde aan Commons aan alle andere
+//   > Deelnemers, en navenant recht op afname van pro rata Eurowaarde aan
+//   > Commons bij alle andere Deelnemers.
+//   
+//   We formaliseren dit Artikel als dat we de optie toevoegen om het huidige
+//   saldo in de reasoner te berekenen.
+//   
+//   Gegeven is het `jaarlijks-commons-budget`, afgeleid op 2500 euro per jaar
+//   á artikel 7.3. Dan is er het feit `jaarlijks-commons-budget-schaling`, wat
+//   met een waarde van 0-10000 weergeeft hoeveel procent in het jaar de
+//   Deelnemer is toegetreden (maar als een fixed-point nummer met twee
+//   decimalen). Daarna wordt met elke overeenkomst het budget van de Deelnemer
+//   geupdate.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaald het totale Commons-budget per aanbieder/afnemer paar in een bepaald jaar.
+Fact jaarlijks-commons-budget Identified by jaar * int
+    Derived from (Foreach int:
+        jaarlijks-commons-budget(int, 250000)
+        When int >= 2023
+    )
+
+Extend Fact int Derived from (Foreach jaarlijks-commons-budget: jaarlijks-commons-budget.jaar)
+Extend Fact int Derived from (Foreach jaarlijks-commons-budget: jaarlijks-commons-budget.int)
+
+
+
+/// Feit waarmee `jaarlijks-commons-budget` kan worden gegeven zodat de standaard worden
+/// overschreven.
+Event verklaar-jaarlijks-commons-budget
+    Related to jaar, int
+    Creates jaarlijks-commons-budget(jaar, int)
+    Terminates (Foreach jaarlijks-commons-budget:
+        jaarlijks-commons-budget When jaarlijks-commons-budget.jaar == jaar
+    )
+
+
+
+/// Bepaald de "ratio" wanneer een Deelnemer in een jaar is toegetreden om het budget te kunnen
+/// schalen naar pro rata.
+/// 
+/// Doe de berekening als volgt:
+/// - Vind het aantal dagen in een jaar;
+/// - Zet de datum van toetreding om in een aantal dagen sinds het begin van het jaar;
+/// - Berekenen het percentage dat het tweede deel is van het eerste (i.e., "hoeveel procent van
+///   het jaar is verstreken op het moment dat de Deelnemer toetreedt"); en
+/// - Geef het als een fixed-point nummer met twee decimalen.
+Fact jaarlijks-commons-budget-ratio Identified by [Deelnemer] * int * jaar
+
+Extend Fact [Deelnemer] Derived from (Foreach jaarlijks-commons-budget-ratio: jaarlijks-commons-budget-ratio.[Deelnemer])
+Extend Fact int Derived from (Foreach jaarlijks-commons-budget-ratio: jaarlijks-commons-budget-ratio.int)
+Extend Fact int Derived from (Foreach jaarlijks-commons-budget-ratio: jaarlijks-commons-budget-ratio.jaar)
+
+
+
+
+
+///// BEREKEN HOOKS /////
+/// Berekend het initiële commons-budget
+Extend Fact commons-budget
+    Derived from (Foreach jaarlijks-commons-budget, jaarlijks-commons-budget-ratio, aanbieder:
+        commons-budget(
+            jaarlijks-commons-budget-ratio.[Deelnemer],
+            aanbieder,
+            (jaarlijks-commons-budget.int / 10000) * (10000 - jaarlijks-commons-budget-ratio.int),
+            jaarlijks-commons-budget-ratio.jaar
+        )
+        When jaarlijks-commons-budget.jaar == jaarlijks-commons-budget-ratio.jaar
+    )
+
+
+
+/// Berekend het nieuwe Commons-budget na een overeenkomst.
+/// 
+/// LET WEL: We gaan er vanuit dat de ondertekening een success is. Als slechts één partij
+/// ondertekend, zou dit feit niet gegeven moeten worden uit angst dat het niet werkt.
+Extend Act onderteken
+    /// Het creeërt een geupdatet commons-budget
+    Creates (Foreach commons-budget, afgesproken-prijs:
+        commons-budget(reactie.afnemer, reactie.aanbod.aanbieder, commons-budget.int - afgesproken-prijs.int, reactie.aanbod.jaar)
+        When (
+            reactie.afnemer == [Deelnemer]
+            && reactie-als-commons(reactie)
+            && commons-budget.afnemer == reactie.afnemer
+            && commons-budget.aanbieder == reactie.aanbod.aanbieder
+            && commons-budget.int >= afgesproken-prijs.int
+            && commons-budget.jaar == reactie.aanbod.jaar
+            && afgesproken-prijs.reactie == reactie
+        )
+    )
+    /// Het verwijderd alle oude commons budgets.
+    /// NOTE: Moet `Terminates` zijn, want het verwijderd ook de initiële waarde.
+    Terminates (Foreach commons-budget:
+        commons-budget
+        When (
+            reactie.afnemer == [Deelnemer]
+            && reactie-als-commons(reactie)
+            && commons-budget.afnemer == reactie.afnemer
+            && commons-budget.aanbieder == reactie.aanbod.aanbieder
+            && commons-budget.jaar == reactie.aanbod.jaar
+            && afgesproken-prijs.reactie == reactie
+        )
+    )
+
+
+
+
+
+///// EINDE /////
+.

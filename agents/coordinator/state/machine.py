@@ -1,6 +1,6 @@
 """A small, data-driven finite state machine for the project lifecycle.
 
-The spec lives in ``config/project-states.json`` (see ``todo/PROJECT_STATE_MANAGEMENT.md``) so the
+The spec lives in ``config/project-states.json`` (see ``docs/planning-instructions/coordinator/PROJECT_STATE_MANAGEMENT.md``) so the
 lifecycle can be revised without code changes. The machine answers three questions the
 coordinator needs on every request:
 
@@ -36,13 +36,18 @@ class TransitionResult:
 
 class StateMachine:
     def __init__(self, spec: dict):
-        self._spec = spec
         self._states: dict[str, dict] = {s["id"]: s for s in spec.get("states", [])}
         if not self._states:
             raise StateMachineError("State machine spec has no states")
         self._global = spec.get("globalActions", {})
         # Convention: the first declared state is the initial state.
         self._initial = spec["states"][0]["id"]
+        # Per-state actions plus the always-available global actions (deduped, ordered), computed
+        # once: the coordinator asks for them several times per message.
+        self._allowed: dict[str, tuple[str, ...]] = {
+            sid: tuple(dict.fromkeys([*s.get("allowedActions", []), *self._global]))
+            for sid, s in self._states.items()
+        }
 
     @classmethod
     def from_config(cls, path: str | Path) -> "StateMachine":
@@ -63,21 +68,11 @@ class StateMachine:
 
     def allowed_actions(self, state: str) -> list[str]:
         """Per-state actions plus the always-available global actions (deduped, ordered)."""
-        spec = self._require_state(state)
-        actions = list(spec.get("allowedActions", []))
-        for g in self._global:
-            if g not in actions:
-                actions.append(g)
-        return actions
+        self._require_state(state)
+        return list(self._allowed[state])
 
     def can(self, state: str, action: str) -> bool:
         return action in self.allowed_actions(state)
-
-    def is_terminal(self, state: str) -> bool:
-        spec = self._require_state(state)
-        return not spec.get("transitions") and not any(
-            a for a in spec.get("allowedActions", []) if a not in self._global
-        )
 
     # --- transitions -----------------------------------------------------------
     def apply(self, state: str, action: str, *, semantics_changed: bool = False) -> TransitionResult:

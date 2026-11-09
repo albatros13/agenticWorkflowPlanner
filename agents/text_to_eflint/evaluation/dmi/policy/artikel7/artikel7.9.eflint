@@ -1,0 +1,40 @@
+// ARTIKEL 7.9.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.9** De kosten die gemoeid zijn met het gebruik van de Algemene
+//   > Voorzieningen ten behoeve van een transactie in het kader van de
+//   > Commons, komen voor rekening van de Deelnemer die afneemt, ook in geval
+//   > van gebruik als beschreven onder 7.6.
+//   
+//   We formaliseren dit Artikel als dat eisen dat iemand claimt dat de PDX
+//   kosten door de afnemer worden betaald.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Bepaald dat de afnemer de PDX kosten van (een) transactie(s) gaat betalen.
+Fact pdx-kosten-betaald-door-afnemer Identified by reactie
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+/// Een overeenkomst mag pas worden gesloten als beloofd is dat de PDX kosten door de afnemer
+/// worden betaald.
+Extend Act onderteken
+    Conditioned by (
+        Not(reactie-als-commons(reactie))
+        || pdx-kosten-betaald-door-afnemer(reactie)
+    )
+
+
+
+
+
+///// EINDE /////
+.

@@ -54,22 +54,39 @@ def test_openai_provider_delegates_to_api(monkeypatch):
 
 
 def test_provider_without_sdk_raises_llm_error(monkeypatch):
-    # When the provider SDK isn't installed, the lazy api import fails -> LLMError,
-    # not a raw ModuleNotFoundError leaking out of the pipeline.
-    import builtins
+    # When the provider SDK isn't installed, the lazy api import fails -> LLMError naming the
+    # missing SDK, not a raw ModuleNotFoundError leaking out of the pipeline.
+    import sys
 
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name == "api.openai_client" or name.startswith("openai"):
-            raise ModuleNotFoundError("No module named 'openai'")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.delitem(sys.modules, "api.openai_client", raising=False)
+    monkeypatch.setitem(sys.modules, "openai", None)  # makes `import openai` fail
     with pytest.raises(LLMError, match="openai.*not installed"):
         OpenAIProvider(model="gpt-test").generate_json(
             task="t", system="s", prompt="p", schema=SCHEMA,
         )
+
+
+def test_broken_api_module_is_not_reported_as_a_missing_sdk(monkeypatch):
+    # Regression: api/openai_client.py once imported a helper that did not exist; the ImportError
+    # was reported as "openai not installed", hiding the real cause.
+    import api.openai_client as client
+
+    monkeypatch.delattr(client, "ask_openai_structured")
+    with pytest.raises(LLMError, match="Cannot load the openai client") as info:
+        OpenAIProvider(model="gpt-test").generate_json(task="t", system="s", prompt="p", schema=SCHEMA)
+    assert "not installed" not in str(info.value)
+
+
+def test_api_clients_import_without_side_effects(monkeypatch):
+    # No key at import time is fine: the key is read on the call, after .env has been loaded.
+    import importlib
+    import sys
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delitem(sys.modules, "api.openai_client", raising=False)
+    client = importlib.import_module("api.openai_client")
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY not set"):
+        client.ask_openai_structured(task="t", system="s", prompt="p", schema=SCHEMA, model="m")
 
 
 def test_provider_wraps_api_errors_as_llm_error(monkeypatch):

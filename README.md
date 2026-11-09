@@ -93,9 +93,8 @@ agents/                         # Agent layer — one folder per agent (each wit
   <agent>/pyproject.toml        #   standalone project selecting the agent's extra (see RUN.md, Option B)
 
 api/                            # single source of truth for real provider SDK calls
-  anthropic_client.py           #   Anthropic SDK: structured JSON, chat, tool-loop, vision
-  openai_client.py              #   OpenAI SDK: structured JSON, chat, tool-loop, vision
-  qdrant_remote_client.py       #   Qdrant client (retrieval)
+  anthropic_client.py           #   Anthropic SDK: structured (tool-forced) JSON output
+  openai_client.py              #   OpenAI SDK: structured (function-forced) JSON output
 
 config/
   agents.json                   # agent registry (which agents, transport, base_url, intents)

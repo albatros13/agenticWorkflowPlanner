@@ -8,22 +8,20 @@ the package still imports without the ``anthropic`` SDK installed.
 """
 from __future__ import annotations
 
-import os
-
-from .base import LLMError, LLMProvider, LLMResult
-
-# Latest, most capable default (see project model guidance).
-DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+from ..config import DEFAULT_ANTHROPIC_MODEL
+from .base import LLMError, LLMProvider, LLMResult, import_api_function
 
 
 class AnthropicProvider(LLMProvider):
-    """Force structured output via a single tool the model must call (delegated to api/)."""
+    """Force structured output via a single tool the model must call (delegated to api/).
+
+    The API key is read from the environment (``ANTHROPIC_API_KEY``) by the api client,
+    keeping secrets in one place.
+    """
 
     name = "anthropic"
 
-    def __init__(self, model: str = DEFAULT_MODEL, api_key: str | None = None):
-        # ``api_key`` is accepted for interface compatibility; the api client reads the
-        # key from the environment (ANTHROPIC_API_KEY), keeping secrets in one place.
+    def __init__(self, model: str = DEFAULT_ANTHROPIC_MODEL):
         self.model = model
 
     def generate_json(
@@ -35,15 +33,9 @@ class AnthropicProvider(LLMProvider):
         schema: dict,
         max_tokens: int = 4096,
     ) -> LLMResult:
+        ask = import_api_function("api.anthropic_client", "ask_anthropic_structured", sdk="anthropic")
         try:
-            from api.anthropic_client import ask_anthropic_structured  # noqa: PLC0415 - lazy
-        except ImportError as exc:  # pragma: no cover - depends on optional dep
-            raise LLMError(
-                "The 'anthropic' package is not installed. Install it with "
-                "`pip install .[llm]` to use the Anthropic provider."
-            ) from exc
-        try:
-            data, raw_text, model = ask_anthropic_structured(
+            data, raw_text, model = ask(
                 task=task, system=system, prompt=prompt, schema=schema,
                 max_tokens=max_tokens, model=self.model,
             )

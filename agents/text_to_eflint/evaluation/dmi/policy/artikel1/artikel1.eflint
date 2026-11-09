@@ -1,0 +1,15 @@
+// ARTIKEL 1.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Definieerd het eerste Artikel van het Afsprakenstelsel in zijn geheel.
+// 
+//   Zie de geïmporteerde bestanden om de delen ervan te snappen.
+//
+
+#require "./commons.eflint".
+#require "./entiteiten.eflint".
+#require "./kosten.eflint".
+#require "./model.eflint".
+#require "./pdd.eflint".
+#require "./tijd.eflint".

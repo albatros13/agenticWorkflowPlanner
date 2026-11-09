@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,3 +68,20 @@ def agent_storage(agent: str) -> StorageLocation:
 def shared_storage() -> StorageLocation:
     """The cross-agent shared exchange location."""
     return _resolve(_load().get("shared", {"kind": "local", "path": "storage"}))
+
+
+# Ids that become a single path component (user ids, project ids, document ids). Letters, digits
+# and ``@._+-`` cover uuids, hashes and e-mail addresses; a leading dot (``.``, ``..``, hidden
+# files) and ``..`` anywhere are rejected so an id can never leave its parent directory.
+_SAFE_ID = re.compile(r"^(?!\.)(?!.*\.\.)[A-Za-z0-9@._+-]{1,128}$")
+
+
+def safe_id(value: str | None, what: str = "id") -> str:
+    """Return ``value`` if it is safe to use as one path component, else raise ``ValueError``."""
+    if not isinstance(value, str) or not _SAFE_ID.match(value):
+        raise ValueError(f"invalid {what} {value!r}")
+    return value
+
+
+def is_safe_id(value: str | None) -> bool:
+    return isinstance(value, str) and bool(_SAFE_ID.match(value))

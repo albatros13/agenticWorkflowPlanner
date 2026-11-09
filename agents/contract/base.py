@@ -2,7 +2,7 @@
 
 ``InProcessAgent`` wraps an :class:`AgentHandler` (the agent's business logic) and calls it
 directly. ``HttpAgent`` speaks the REST contract to a remote agent service. Both expose the
-same :class:`Agent` surface, so the coordinator is transport-agnostic (COORDINATOR_PLAN sec 4).
+same :class:`Agent` surface, so the coordinator is transport-agnostic.
 """
 from __future__ import annotations
 

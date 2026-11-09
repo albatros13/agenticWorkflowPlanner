@@ -1,0 +1,91 @@
+// PASS COMMONS TRANSACTION (EN).eflint
+//   by Tim Müller
+// 
+// Description:
+//   A file showcasing how to call the entire Afsprakenstelsel such that it
+//   passes _and_ all checks are being executed.
+//   
+//   This version shows the policy for a transaction that is done as Commons.
+// 
+
+// (NOTE: If you're appending, then replace this line with the contents of the entire policy. This
+//  line just tells the reasoner to do it for you.)
+#require "../../afsprakenstelsel.eflint".
+
+
+///// SCENARIO /////
+// First, declare the "technical world" of the policy
+{
+    +id("a1"). +id("r1"). +id("t1").
+    +[PDD]("Appel").
+    +datum(2025, 10, 1).
+}
+
+// Then we declare participants
+{
+    +[Deelnemer]("Amy"). +deelnemer-type("Amy", "Privaat groot").
+    +[Deelnemer]("Bob"). +deelnemer-type("Bob", "Privaat klein").
+}
+
+
+
+// Now let's satisfy some policy so that Amy can start to make offers.
+{
+    // Article 2.1 & 2.3c: We must declare that they are legal participants
+    +deelnemer-toegetreden("Amy", datum(2025, 10, 1)).
+    +deelnemer-toegetreden("Bob", datum(2025, 10, 1)).
+
+    // Article 7.2: We must state Bob's Commons budget towards Amy. Let's say they have done some
+    // transactions in the past already.
+    +commons-budget(Bob, Amy, 150000, 2025).
+
+    // Article 7.2: They must have offered something on Commons before- or on the day of doing a
+    // transaction.
+    +deelnemer-heeft-commons-aangeboden("Amy", datum(2025, 10, 1)).
+    +deelnemer-heeft-commons-aangeboden("Bob", datum(2025, 10, 1)).
+
+    // Article 7.3: Amy must have the Appel commercially available somewhere before publishing it
+    // as Commons, since she's a non-public organisation
+    +pdd-commercieel-beschikbaar("Appel").
+
+    // Rating hook: we define the ratings of the participants
+    +deelnemer-rating("Amy", "D").
+    +deelnemer-rating("Bob", "C").
+}
+
+
+
+// Amy puts her Apple on offer for 50000 cents (500 euros).
+maak-aanbod("Amy", "a1", "Appel", datum(2025, 10, 1)).
++aanbod-als-commons(aanbod("a1", "Amy", "Appel", 2025)).
++prijs(aanbod("a1", "Amy", "Appel", 2025), 50000).
+
+// Bob responds to it, agreeing with Amy to do it as Commons.
+// This is completely separate from the Fact Amy offered it as Commons.
+reageer("Bob", "r1", aanbod("a1", "Amy", "Appel", 2025), datum(2025, 10, 1)).
++reactie-als-commons(reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025))).
++afgesproken-prijs(reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025)), 50000).
+
+
+
+// Intermittent policy facts...
+{
+    // Article 7.9: The parties must declare the the recipient (Bob) will pay for the PDX.
+    +pdx-kosten-betaald-door-afnemer(reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025))).
+
+    // Article 7.13: Bob must promise they'll only use the Commons for non-commercial usage
+    +aanwending-alleen-voor-niet-commercieel-gebruik(reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025))).
+}
+
+
+
+// The parties sat down and tweaked the proposal. Now everyone agrees.
+onderteken(Amy, reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025)), datum(2025, 10, 1)).
+onderteken(Bob, reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025)), datum(2025, 10, 1)).
+
+// Now Bob starts consumin'
+neem-af(Bob, Amy, "t1", overeenkomst(reactie("r1", Bob, aanbod("a1", Amy, Appel, 2025))), datum(2025, 10, 1)).
+
+
+
+// No violation!! Policy passed!!

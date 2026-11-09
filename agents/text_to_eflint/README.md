@@ -37,7 +37,13 @@ The code lives in [`generation/`](generation/):
 - An agent handler ([`agent.py`](agent.py)) with two intents: `generate_eflint`, and
   `validate_eflint` (checks a spec and runs its scenarios, no LLM).
 - A standalone service ([`service.py`](service.py)) on port 8091 (`/generate`, `/validate`).
-- A "Generate eFLINT" button in the demo UI ([`demo/`](demo/)).
+- A "Generate eFLINT" button in the demo UI ([`demo/`](demo/)). "Load sample" offers four Dutch
+  regulatory-text samples from the DMI Afsprakenstelsel. After generating from a sample, the demo
+  compares the result with the sample's reference formalisation.
+- A generation-quality evaluation ([`evaluation/`](evaluation/)). It uses the vendored DMI
+  formalisation ([`evaluation/dmi/README.md`](evaluation/dmi/README.md)), a structural comparator
+  and a QA runner (`python -m agents.text_to_eflint.evaluation.qa --out <dir>`). The method and
+  results are in [`docs/test_to_eflint/QA_EVAL.md`](../../docs/test_to_eflint/QA_EVAL.md).
 - Registration in `config/agents.json`, `config/storage.json` and the coordinator factory.
 - Run instructions in [`RUN.md`](../../RUN.md).
 
@@ -46,7 +52,8 @@ The code lives in [`generation/`](generation/):
 - **Golden tests:** all five upstream scenarios run through the simulator. Every result matches
   what the author wrote in the comments ("// False", "fails", "does not hold"). The upstream spec
   also survives a round trip: load, render, re-parse, and the scenarios give the same results.
-- **Test suite:** 66 tests in `tests/text_to_eflint/`, all offline (scripted LLM provider).
+- **Test suite:** `tests/text_to_eflint/`, all offline (scripted LLM provider), plus the opt-in
+  live quality test `test_dmi_quality_live.py` (`EFLINT_QA_LIVE=1`).
 - **Live run:** on GDPR Art. 6(1)(a), 7(3) and 17(1)(b) with Claude Sonnet, generation succeeded
   after 2 repair rounds, with 4/4 scenarios passing and no grounding warnings. It took about
   2.5 minutes.

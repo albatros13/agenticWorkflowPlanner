@@ -1,0 +1,24 @@
+// ARTIKEL 7.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat Commons definieert en regels over instelt.
+// 
+
+// Importeer de sub-artikelen.
+#require "./artikel7.1.eflint".
+#require "./artikel7.2.eflint".
+#require "./artikel7.3.eflint".
+// Artikel 7.4 is niet automatisch gehandhaafd tijdens de MVP
+// Artikel 7.5 is niet automatisch gehandhaafd tijdens de MVP
+#require "./artikel7.6.eflint".
+// Artikel 7.7 is niet automatisch gehandhaafd tijdens de MVP
+#require "./artikel7.8.eflint".
+#require "./artikel7.9.eflint".
+// Artikel 7.10 is niet automatisch gehandhaafd tijdens de MVP
+// Artikel 7.11 is niet automatisch gehandhaafd tijdens de MVP (niet meer dan Artikel 3.1 al doet)
+#require "./artikel7.12.eflint".
+#require "./artikel7.13.eflint".
+// Artikel 7.14 is niet automatisch gehandhaafd tijdens de MVP
+#require "./artikel7.15.eflint".
+#require "./artikel7.16.eflint".

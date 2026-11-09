@@ -23,6 +23,8 @@ The official interpreter remains the authority — differences are possible outs
 """
 from __future__ import annotations
 
+import math
+import operator
 import re
 from dataclasses import dataclass, field
 from itertools import product
@@ -32,6 +34,13 @@ from .spec import ATOMIC_BASES
 from .syntax import App, BinOp, Cmp, Decl, Expr, Lit, Not, Quant, Var, Wrap
 
 Prim = Union[str, int, bool]
+
+
+# Exists/Forall enumerate the product of their variables' domains; refuse a quantifier whose
+# product exceeds this many bindings instead of hanging the request.
+MAX_QUANTIFIER_BINDINGS = 100_000
+_CMP = {"==": operator.eq, "!=": operator.ne, "<": operator.lt, "<=": operator.le, ">": operator.gt,
+        ">=": operator.ge}
 
 
 class EvalError(ValueError):
@@ -138,7 +147,7 @@ class Simulator:
             if len(app.args) != len(info.params):
                 raise EvalError(f"{app.name} takes {len(info.params)} argument(s), got {len(app.args)}")
             vals = [self.eval(a, env) for a in app.args]
-        return Inst(app.name, tuple(self._coerce(v, t) for v, (_, t) in zip(vals, info.params)))
+        return Inst(app.name, tuple(self._coerce(v, t) for v, (_, t) in zip(vals, info.params, strict=True)))
 
     def bind(self, inst: Inst) -> dict:
         return {var: val for (var, _), val in zip(self.types[inst.type].params, inst.args)}
@@ -166,7 +175,7 @@ class Simulator:
         if info.kind != "Act":
             raise EvalError(f"{inst.type} is not an act")
         env = self.bind(inst)
-        for (var, t), val in zip(info.params, inst.args):
+        for (_var, t), val in zip(info.params, inst.args, strict=True):
             if t in self.types and not self.holds(val if isinstance(val, Inst) else Inst(t, (val,))):
                 return False
         for cond in (info.decl.holds_when, info.decl.conditioned_by):
@@ -219,13 +228,16 @@ class Simulator:
         if isinstance(e, Cmp):
             a, b = self._prim(self.eval(e.left, env)), self._prim(self.eval(e.right, env))
             try:
-                return {"==": a == b, "!=": a != b}[e.op] if e.op in ("==", "!=") else \
-                    {"<": a < b, "<=": a <= b, ">": a > b, ">=": a >= b}[e.op]
+                return _CMP[e.op](a, b)
             except TypeError as exc:
                 raise EvalError(f"cannot compare {a!r} and {b!r}") from exc
         if isinstance(e, Quant):
             doms = [self.domain(type_of_var(v)) for v in e.vars]
-            results = (self.truth(self.eval(e.body, {**env, **dict(zip(e.vars, combo))}))
+            bindings = math.prod(len(d) for d in doms)
+            if bindings > MAX_QUANTIFIER_BINDINGS:
+                raise EvalError(f"{e.kind} over {', '.join(e.vars)} has {bindings} bindings "
+                                f"(limit {MAX_QUANTIFIER_BINDINGS})")
+            results = (self.truth(self.eval(e.body, {**env, **dict(zip(e.vars, combo, strict=True))}))
                        for combo in product(*doms))
             return any(results) if e.kind == "Exists" else all(results)
         raise EvalError(f"cannot evaluate {e!r}")

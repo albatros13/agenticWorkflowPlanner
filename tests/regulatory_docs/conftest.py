@@ -27,6 +27,9 @@ class InMemoryStore:
             self.points[p["id"]] = p  # same id overwrites -> idempotent re-vectorize
         return len(points)
 
+    def delete_document(self, doc_id: str) -> None:
+        self.points = {k: p for k, p in self.points.items() if p["payload"].get("doc_id") != doc_id}
+
     def count(self) -> int:
         return len(self.points)
 

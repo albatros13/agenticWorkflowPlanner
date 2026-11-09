@@ -1,0 +1,24 @@
+// HOOK.eflint
+//   door Tim Müller
+//
+// Beschrijving:
+//   Een speciaal deel van de rating policy dat gebruikt wordt door het
+//   Afsprakenstelsel om alleen maar Deelnemers met een rating hoger dan G door
+//   te laten.
+//
+
+#require "../artikel1/artikel1.eflint".
+#require "./rating-model.eflint".
+
+
+///// NORMATIEVE HOOKS /////
+/// Alleen Deelnemers met een rating hoger dan "G" mogen ondertekenen.
+Extend Act onderteken
+    Conditioned by Not(deelnemer-rating([Deelnemer], "G"))
+
+
+
+
+
+///// EINDE /////
+.

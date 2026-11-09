@@ -1,0 +1,20 @@
+// ARTIKEL 3.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **3.1** Iedere Deelnemer aan het DMI-ecosysteem is verplicht zich te
+//   > allen tijde onverkort te houden aan alle in Nederland geldende wet- en
+//   > regelgeving waaronder, doch niet uitsluitend, de AVG en alle Europese
+//   > verordeningen. In alle gevallen garandeert Deelnemer dat data-opslag
+//   > en/of gegevensverwerking plaats zullen vinden binnen de Europese
+//   > Economische Ruimte (EER).
+//   
+//   In andere woorden, dit Artikel verzamelt allerlei externe wetgeving 
+//   waaraan voldaan moeten worden. Voor nu is dat:
+//   - De AVG/GDPR.
+// 
+
+
+// Definieer de modules die deel zijn van Artikel 3.1
+#require "./gdpr.eflint".

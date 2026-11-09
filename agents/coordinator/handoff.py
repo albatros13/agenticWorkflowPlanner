@@ -15,7 +15,7 @@ import os
 import shutil
 from pathlib import Path
 
-from agents.storage import shared_storage
+from agents.storage import safe_id, shared_storage
 
 
 BPMN = "model.bpmn"
@@ -33,10 +33,11 @@ class ModelHandoff:
             root = Path(env) if env else shared_storage().path("projects")
         self.root = Path(root)
 
+    def _dir(self, project_id: str) -> Path:
+        return self.root / safe_id(project_id, "project id")
+
     def _path(self, project_id: str, filename: str = BPMN) -> Path:
-        if Path(filename).name != filename or filename in ("", ".", ".."):
-            raise ValueError(f"invalid artifact name {filename!r}")
-        return self.root / project_id / filename
+        return self._dir(project_id) / safe_id(filename, "artifact name")
 
     def save(self, project_id: str, filename: str, content: str) -> None:
         path = self._path(project_id, filename)
@@ -57,4 +58,4 @@ class ModelHandoff:
         return self.load(project_id, BPMN)
 
     def remove(self, project_id: str) -> None:
-        shutil.rmtree(self.root / project_id, ignore_errors=True)
+        shutil.rmtree(self._dir(project_id), ignore_errors=True)

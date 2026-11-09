@@ -22,7 +22,7 @@ class SemanticProjectCache(abc.ABC):
 
     @abc.abstractmethod
     def find_similar(
-        self, query: str, *, user_id: str | None = None, k: int = 5, min_score: float = 0.0
+        self, query: str, *, user_id: str | None = None, k: int = 5
     ) -> list[SimilarProject]:
         """Return up to ``k`` existing projects similar to ``query`` (by embedding distance)."""
 

@@ -10,6 +10,7 @@ finished job so the service does not accumulate results.
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -88,14 +89,6 @@ class EflintVerifierClient:
         return resp
 
     # --- public ----------------------------------------------------------------------------
-    def submit(self, request: dict[str, Any]) -> str:
-        with self._client() as client:
-            return _json(self._call(client, "POST", "/v1/jobs", json=request))["id"]
-
-    def status(self, job_id: str) -> dict[str, Any]:
-        with self._client() as client:
-            return _json(self._call(client, "GET", f"/v1/jobs/{job_id}"))
-
     def run(self, request: dict[str, Any]) -> JobOutcome:
         """Submit ``request``, wait for a terminal status, fetch the result, delete the job."""
         s = self.settings
@@ -120,10 +113,8 @@ class EflintVerifierClient:
             result = None
             if status.get("status") == "succeeded":
                 result = _json(self._call(client, "GET", f"/v1/jobs/{job_id}/result"))
-            try:  # best effort: a cancelled job may still be shutting down (409)
+            with contextlib.suppress(VerifierError):  # best effort: a cancelled job may still be shutting down (409)
                 self._call(client, "DELETE", f"/v1/jobs/{job_id}")
-            except VerifierError:
-                pass
         return JobOutcome(job_id=job_id, status=status.get("status", "failed"), result=result,
                           error=status.get("error"), elapsed_s=round(time.monotonic() - started, 3))
 

@@ -1,0 +1,466 @@
+// GDPR.eflint
+//   door Marten Steketee, Thomas van Binsbergen & Tim Müller
+//
+// Beschrijving:
+//   Een minimale core van de AVG/GDPR die we gebruiken voor het DMI
+//   Ecosysteem.
+//
+//   Deze code is overgenomen van [1] maar aangepast voor DMI. In het specifiek
+//   is de meeste informatie gecontextualiseerd naar specifieke overeenkomsten,
+//   en zijn sommige concepten direct vervangen door DMI concepten.
+//
+//   # Referenties
+//   [1] L.T. van Binsbergen, M.C. Steketee, M.G. Kebede, H.L. Janssen, T.M.
+//       van Engers. _Lawful and Accountable Personal Data Processing with
+//       GDPR-based Access and Usage Control in Distributed Systems_. To be
+//       published.
+//
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// ALIASES /////
+Placeholder controller For [Deelnemer].
+Placeholder processor For [Deelnemer].
+
+
+
+
+
+///// INPUT /////
+/// Specificeert data subjects.
+///
+/// Dit zijn waarschijnlijk geen deelnemers in het Ecosysteem. Om die reden is dit een apart feit.
+Fact subject Identified by String
+
+/// Specificeert mogelijke doelen.
+Fact purpose Identified by String
+Placeholder specific-purpose For purpose
+Placeholder generic-purpose  For purpose
+Placeholder compatible-purpose For purpose
+
+/// Specificeert mogelijke verwerkingsacties.
+Fact processing-action Identified by String
+
+
+
+// Stelt dat een subject consent heeft gegeven aan een controller voor een purpose.
+Fact consent-given Identified by subject * controller * purpose
+    // Leiden we af als er al consent is gegeven voor een generiekere purpose
+    Derived from (Foreach consent-given, specific-purpose:
+        consent-given(consent-given.subject, consent-given.controller, specific-purpose)
+        When consent-given && specific-of(consent-given.controller, specific-purpose, consent-given.purpose)
+    )
+
+Extend Fact subject Derived from (Foreach consent-given: consent-given.subject)
+Extend Fact [Deelnemer] Derived from (Foreach consent-given: consent-given.controller)
+Extend Fact purpose Derived from (Foreach consent-given: consent-given.purpose)
+
+
+
+// Stelt dat een subject een contract heeft opgesteld met een controller voor een purpose.
+Fact contract Identified by subject * controller * purpose
+    // Leiden we af als er al een contract is voor een generiekere purpose
+    Holds when (Exists generic-purpose:
+        contract(subject, controller, generic-purpose) && specific-of(controller, purpose, generic-purpose)
+    )
+
+Extend Fact subject Derived from (Foreach contract: contract.subject)
+Extend Fact [Deelnemer] Derived from (Foreach contract: contract.controller)
+Extend Fact purpose Derived from (Foreach contract: contract.purpose)
+
+
+
+/// Stelt dat een controller heeft geclaimt dat een actie nodig is om een doel te vervullen.
+Fact prerequisite-of Identified by controller * processing-action * purpose
+
+Extend Fact [Deelnemer] Derived from (Foreach prerequisite-of: prerequisite-of.controller)
+Extend Fact processing-action Derived from (Foreach prerequisite-of: prerequisite-of.processing-action)
+Extend Fact purpose Derived from (Foreach prerequisite-of: prerequisite-of.purpose)
+
+
+
+/// Stelt dat een controller heeft geclaimt dat de ene purpose geheel onder een andere valt.
+Fact specific-of Identified by controller * specific-purpose * generic-purpose
+    // Transitivity
+    Holds when (Exists purpose:
+        specific-of(controller, specific-purpose, purpose) && specific-of(controller, purpose, generic-purpose)
+    )
+    // Reflexivity
+    Holds when specific-purpose == generic-purpose
+
+Extend Fact [Deelnemer] Derived from (Foreach specific-of: specific-of.controller)
+Extend Fact purpose Derived from (Foreach specific-of: specific-of.specific-purpose)
+Extend Fact purpose Derived from (Foreach specific-of: specific-of.generic-purpose)
+
+
+
+/// Stelt dat een controller een andere Deelnemer heeft gemachtigd om een processor te zijn voor
+/// een bepaalde purpose.
+Fact processor-for Identified by processor * controller * purpose
+
+Extend Fact [Deelnemer] Derived from (Foreach processor-for: processor-for.processor)
+Extend Fact [Deelnemer] Derived from (Foreach processor-for: processor-for.controller)
+Extend Fact purpose Derived from (Foreach processor-for: processor-for.purpose)
+
+
+
+/// Stelt dat een controller heeft geclaimt dat een purpose voldoende specifiek is - i.e., het is
+/// niet breder dan wat er nodig is.
+Fact sufficiently-specific Identified by controller * purpose
+
+Extend Fact [Deelnemer] Derived from (Foreach sufficiently-specific: sufficiently-specific.controller)
+Extend Fact purpose Derived from (Foreach sufficiently-specific: sufficiently-specific.purpose)
+
+
+
+/// Stelt dat een controller heeft geclaimt dat een purpose in plaats van een andere purpose mag
+/// worden gebruikt.
+Fact compatible-with Identified by controller * compatible-purpose * purpose.
+
+Extend Fact [Deelnemer] Derived from (Foreach compatible-with: compatible-with.controller)
+Extend Fact purpose Derived from (Foreach compatible-with: compatible-with.compatible-purpose)
+Extend Fact purpose Derived from (Foreach compatible-with: compatible-with.purpose)
+
+
+
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat alle subjects consent moeten geven.
+Fact legal-basis-consent             Identified by controller * [Data] * purpose
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat er een contract is opgesteld met alle subjects.
+Fact legal-basis-contract            Identified by controller * [Data] * purpose
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat ze een plicht hebben om dat te doen.
+Fact legal-basis-legal-obligation    Identified by controller * [Data] * purpose
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat er vitale interesse is om dat te doen.
+Fact legal-basis-vital-interests     Identified by controller * [Data] * purpose
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat er maatschappelijke interesse is om dat te doen.
+Fact legal-basis-public-interest     Identified by controller * [Data] * purpose
+/// Definieert dat de controller claimt dat een legal basis voor een verwerking van een dataset
+/// is dat er legitieme interesse is om dat te doen.
+Fact legal-basis-legitimate-interest Identified by controller * [Data] * purpose
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach legal-basis-consent: legal-basis-consent.controller)
+    Derived from (Foreach legal-basis-contract: legal-basis-contract.controller)
+    Derived from (Foreach legal-basis-legal-obligation: legal-basis-legal-obligation.controller)
+    Derived from (Foreach legal-basis-vital-interests: legal-basis-vital-interests.controller)
+    Derived from (Foreach legal-basis-public-interest: legal-basis-public-interest.controller)
+    Derived from (Foreach legal-basis-legitimate-interest: legal-basis-legitimate-interest.controller)
+Extend Fact [Data]
+    Derived from (Foreach legal-basis-consent: legal-basis-consent.[Data])
+    Derived from (Foreach legal-basis-contract: legal-basis-contract.[Data])
+    Derived from (Foreach legal-basis-legal-obligation: legal-basis-legal-obligation.[Data])
+    Derived from (Foreach legal-basis-vital-interests: legal-basis-vital-interests.[Data])
+    Derived from (Foreach legal-basis-public-interest: legal-basis-public-interest.[Data])
+    Derived from (Foreach legal-basis-legitimate-interest: legal-basis-legitimate-interest.[Data])
+Extend Fact purpose
+    Derived from (Foreach legal-basis-consent: legal-basis-consent.purpose)
+    Derived from (Foreach legal-basis-contract: legal-basis-contract.purpose)
+    Derived from (Foreach legal-basis-legal-obligation: legal-basis-legal-obligation.purpose)
+    Derived from (Foreach legal-basis-vital-interests: legal-basis-vital-interests.purpose)
+    Derived from (Foreach legal-basis-public-interest: legal-basis-public-interest.purpose)
+    Derived from (Foreach legal-basis-legitimate-interest: legal-basis-legitimate-interest.purpose)
+
+
+
+/// We definiëren dat een bepaalde subject is geïnformeerd over een bepaald onderwerp.
+Fact subject-geinformeerd Identified by controller * subject * purpose
+
+Extend Fact [Deelnemer] Derived from (Foreach subject-geinformeerd: subject-geinformeerd.controller)
+Extend Fact subject Derived from (Foreach subject-geinformeerd: subject-geinformeerd.subject)
+Extend Fact purpose Derived from (Foreach subject-geinformeerd: subject-geinformeerd.purpose)
+
+
+
+/// We definiëren of dat data de persoonlijke informatie van een subject weergeeft.
+Fact subject-of Identified by subject * [Data]
+
+Extend Fact subject Derived from (Foreach subject-of: subject-of.subject)
+Extend Fact [Data] Derived from (Foreach subject-of: subject-of.[Data])
+
+
+
+/// Feit dat aggregeert of een dataset überhaupt persoonlijke data bevat.
+Fact bevat-persoonlijke-data Identified by [Data]
+    Holds when (Exists subject:
+        subject-of(subject, [Data])
+    )
+
+
+
+/// We definiëren dat een Deelnemer de controller is van een dataset **voor een bepaalde
+/// verwerkingshandeling.**
+Fact controller-van Identified by controller * [Data] * processing-action
+
+Extend Fact [Deelnemer] Derived from (Foreach controller-van: controller-van.controller)
+Extend Fact [Data] Derived from (Foreach controller-van: controller-van.[Data])
+Extend Fact processing-action Derived from (Foreach controller-van: controller-van.processing-action)
+
+
+
+/// We definiëren dat er bepaalde acties zijn gedaan om een dataset te verkrijgen voor aanbieding.
+///
+/// Er kunnen meerdere acties gebonden zijn aan een aanbod.
+Fact aanbod-action Identified by aanbod * processing-action
+
+Extend Fact processing-action Derived from (Foreach aanbod-action: aanbod-action.processing-action)
+
+
+
+/// We definiëren dat een dataset beschikbaar wordt gesteld voor een bepaald doel.
+///
+/// Er kunnen meerdere purposes gebonden zijn aan een aanbod.
+Fact aanbod-purpose Identified by aanbod * purpose
+
+Extend Fact purpose Derived from (Foreach aanbod-purpose: aanbod-purpose.purpose)
+
+
+
+/// We definiëren dat Overeenkomsten over bepaalde acties gaan.
+///
+/// Er kunnen meerdere acties gebonden zijn aan een overeenkomst.
+Fact reactie-action Identified by reactie * processing-action
+
+Extend Fact processing-action Derived from (Foreach reactie-action: reactie-action.processing-action)
+
+
+
+/// We definiëren dat Overeenkomsten worden gedaan voor een bepaald doel.
+///
+/// Er kunnen meerdere purposes gebonden zijn aan een overeenkomst.
+Fact reactie-purpose Identified by reactie * purpose
+
+Extend Fact purpose Derived from (Foreach reactie-purpose: reactie-purpose.purpose)
+
+
+
+
+
+///// GDPR /////
+/// Leidt af of er een geldige juridische basis is.
+Fact legal-basis Identified by controller * [Data] * purpose
+    Holds when (legal-basis-consent(controller, [Data], purpose)
+        && (Forall subject:
+            // Either, a subject is not a subject for _this_ dataset...
+            Not(subject-of(subject, [Data]))
+            // ...or they gave consent
+            || consent-given(subject, controller, purpose)
+        )
+    )
+    Holds when legal-basis-legitimate-interest(controller, [Data], purpose)
+    Holds when (legal-basis-contract(controller, [Data], purpose)
+        && (Forall subject:
+            // Either, a subject is not a subject for _this_ dataset...
+            Not(subject-of(subject, [Data])) ||
+            // ...or they gave consent
+            contract(subject, controller, purpose)
+        )
+    )
+    Holds when legal-basis-legal-obligation(controller, [Data], purpose)
+    Holds when legal-basis-vital-interests(controller, [Data], purpose)
+    Holds when legal-basis-public-interest(controller, [Data], purpose)
+    Conditioned by sufficiently-specific(controller, purpose)
+    Conditioned by (Forall subject:
+        Not(subject-of(subject, [Data]))
+        || subject-geinformeerd(controller, subject, purpose)
+    )
+
+
+
+/// Representeert een nog-te-beoordelen aanvraag om bij een dataset te komen.
+Fact request Identified by processor * processing-action * [Data] * purpose
+    Holds when True
+
+Extend Fact [Deelnemer] Derived from (Foreach request: request.processor)
+Extend Fact processing-action Derived from (Foreach request: request.processing-action)
+Extend Fact [Data] Derived from (Foreach request: request.[Data])
+Extend Fact purpose Derived from (Foreach request: request.purpose)
+
+
+
+/// Representeert dat een `request` wettelijk mag van een controller volgens de GDPR.
+Fact lawful-request Identified by request * controller
+
+Extend Fact request Derived from (Foreach lawful-request: lawful-request.request)
+Extend Fact [Deelnemer] Derived from (Foreach lawful-request: lawful-request.controller)
+
+
+
+/// Bepaald of `request`s `lawful-request`s zijn.
+Extend Fact lawful-request
+    // Het is lawful als de purpose specific genoeg is...
+    Holds when (
+        bevat-persoonlijke-data(request.[Data])
+        // De controller moet wel overeenkomen
+        && controller-van(controller, request.[Data], request.processing-action)
+        // Dan zijn er de GDPR condities
+        && prerequisite-of(controller, request.processing-action, request.purpose)
+        && (Exists purpose':
+            specific-of(controller, request.purpose, purpose')
+            && legal-basis(controller, request.[Data], purpose')
+            && processor-for(request.processor, controller, purpose')
+        )
+    )
+    // In het tweede geval is het wettelijk als de purpose compatibel is
+    Holds when (
+        bevat-persoonlijke-data(request.[Data])
+        // De controller moet wel overeenkomen
+        && controller-van(controller, request.[Data], request.processing-action)
+        // Dan zijn er de GDPR condities
+        && prerequisite-of(controller, request.processing-action, request.purpose)
+        && sufficiently-specific(controller, request.purpose)
+        && (Exists purpose':
+            compatible-with(controller, request.purpose, purpose')
+            && legal-basis(controller, request.[Data], purpose')
+            && processor-for(request.processor, controller, purpose')
+        )
+    )
+
+
+
+
+
+///// DMI /////
+/// De volgende feiten bouwen een langere `Forall` constructief op om uiteindelijk bij de laatste
+/// laag de vraag te stellen die we willen weten.
+///
+/// NOTE: Dit is nodig omdat de Haskell reasoner moeite heeft met een `Forall` waarin meer dan één
+/// parameter wordt gelift naar een eigen feit (wat het geval is voor `Forall controller,
+/// processing-action, purpose`).
+Fact check-lawful-aanbod Identified by id * aanbieder * [PDD] * datum
+    // Het aanbod is lawful als er geen (persoonlijk) data bij betrokken is...
+    Holds when (
+        Not([Data]([PDD]))
+        || Not(bevat-persoonlijke-data([Data]([PDD])))
+    )
+    // ...of als we door de GDPR heenkomen
+    Holds when (
+        // Het gaat over persoonlijke data
+        [Data]([PDD])
+        && bevat-persoonlijke-data([Data]([PDD]))
+        // ...er moet altijd tenminste één processing action zijn gedefinieerd
+        && (Exists processing-action: aanbod-action(aanbod(id, aanbieder, [PDD], datum.jaar), processing-action))
+        // ...en voor alle toepasbare acties moet er een controller en lawful request zijn.
+        && (Forall processing-action:
+            Not(aanbod-action(aanbod(id, aanbieder, [PDD], datum.jaar), processing-action))
+            || check-lawful-aanbod-laag-twee(id, aanbieder, [PDD], datum, processing-action)
+        )
+    )
+
+Fact check-lawful-aanbod-laag-twee Identified by id * aanbieder * [PDD] * datum * processing-action
+    Holds when (
+        // Er moet tenminste één controller zijn...
+        (Exists controller: controller-van(controller, [Data]([PDD]), processing-action))
+        // ...en ALLE controllers moeten door de check komen (of niet gerelateerd zijn)
+        && (Forall controller:
+            Not(controller-van(controller, [Data]([PDD]), processing-action))
+            || check-lawful-aanbod-laag-drie(id, aanbieder, [PDD], datum, controller, processing-action)
+        )
+    )
+
+Fact check-lawful-aanbod-laag-drie Identified by id * aanbieder * [PDD] * datum * controller * processing-action
+    Holds when (
+        // Er moet altijd tenminste één purpose zijn gedefinieerd
+        (Exists purpose: aanbod-purpose(aanbod(id, aanbieder, [PDD], datum.jaar), purpose))
+        && (Forall purpose:
+            Not(aanbod-purpose(aanbod(id, aanbieder, [PDD], datum.jaar), purpose))
+            // Er zijn nog twee gevallen: óf we lezen de provider als de entitled party...
+            || (
+                Not(Exists [Deelnemer]: aanbod-provider(aanbod(id, aanbieder, [PDD], datum.jaar), [Deelnemer]))
+                && lawful-request(request(aanbieder, processing-action, [Data]([PDD]), purpose), controller)
+            )
+            // ...of de gebruiker heeft aangegeven dat er een andere provider is. Dan is die de processor.
+            || (Exists [Deelnemer]:
+                aanbod-provider(aanbod(id, aanbieder, [PDD], datum.jaar), [Deelnemer])
+                && lawful-request(request([Deelnemer], processing-action, [Data]([PDD]), purpose), controller)
+            )
+        )
+    )
+
+
+
+/// De volgende feiten bouwen een langere `Forall` constructief op om uiteindelijk bij de laatste
+/// laag de vraag te stellen die we willen weten.
+///
+/// NOTE: Dit is nodig omdat de Haskell reasoner moeite heeft met een `Forall` waarin meer dan één
+/// parameter wordt gelift naar een eigen feit (wat het geval is voor `Forall controller,
+/// processing-action, purpose`).
+Fact check-lawful-reactie Identified by reactie
+    // De request is lawful als er geen (persoonlijk) data bij betrokken is...
+    Holds when (
+        Not([Data](reactie.aanbod.[PDD]))
+        || Not(bevat-persoonlijke-data([Data](reactie.aanbod.[PDD])))
+    )
+    // ...of als we door de GDPR heenkomen
+    Holds when (
+        // Het gaat over persoonlijke data
+        [Data](reactie.aanbod.[PDD])
+        && bevat-persoonlijke-data([Data](reactie.aanbod.[PDD]))
+        // ...er moet altijd tenminste één processing action zijn gedefinieerd
+        && (Exists processing-action: reactie-action(reactie, processing-action))
+        // ...en voor alle toepasbare acties moet er een controller en lawful request zijn.
+        && (Forall processing-action:
+            Not(reactie-action(reactie, processing-action))
+            || check-lawful-reactie-laag-twee(reactie, processing-action)
+        )
+    )
+
+Fact check-lawful-reactie-laag-twee Identified by reactie * processing-action
+    Holds when (
+        // Er moet tenminste één controller zijn...
+        (Exists controller: controller-van(controller, [Data](reactie.aanbod.[PDD]), processing-action))
+        // ...en ALLE controllers moeten door de check komen (of niet gerelateerd zijn)
+        && (Forall controller:
+            Not(controller-van(controller, [Data](reactie.aanbod.[PDD]), processing-action))
+            || check-lawful-reactie-laag-drie(reactie, controller, processing-action)
+        )
+    )
+
+Fact check-lawful-reactie-laag-drie Identified by reactie * controller * processing-action
+    Holds when (
+        // Er moet altijd tenminste één purpose zijn gedefinieerd
+        (Exists purpose: reactie-purpose(reactie, purpose))
+        && (Forall purpose:
+            Not(reactie-purpose(reactie, purpose))
+            || lawful-request(request(reactie.afnemer, processing-action, [Data](reactie.aanbod.[PDD]), purpose), controller)
+        )
+    )
+
+Fact check-lawful-overeenkomst Identified by overeenkomst
+    Holds when check-lawful-reactie(overeenkomst.reactie)
+
+
+
+
+
+///// LIJMEN /////
+// We zien iets aanbieden als dat het misschien zo is dat een dataset legaal verzameld moet zijn.
+Extend Act maak-aanbod
+    // Je mag alleen ondertekenen als het beoogde aanbod legaal is
+    Conditioned by check-lawful-aanbod(id, aanbieder, [PDD], datum)
+
+
+
+// We zien overeenkomsten sluiten als het doen van een verzoek om te verwerken ("request") (die
+// lawful moet zijn!).
+Extend Act onderteken
+    // Je mag alleen ondertekenen als de beoogde overeenkomst legaal is
+    Conditioned by check-lawful-reactie(reactie)
+
+
+
+// De truc is: we zien transacties als het verwerken van data ("process").
+Extend Act neem-af
+    // Je mag alleen ondertekenen als de overeenkomst legaal is
+    Conditioned by check-lawful-overeenkomst(overeenkomst)
+
+
+
+
+
+///// EINDE /////
+.

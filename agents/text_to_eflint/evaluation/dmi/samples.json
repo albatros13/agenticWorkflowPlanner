@@ -1,0 +1,44 @@
+{
+  "$comment": "Regulatory text samples built from the DMI Afsprakenstelsel formalisation (see README.md). One sample per upstream example scenario in policy/examples/afsprakenstelsel/: 'articles' are the articles that scenario cites, 'modules' the reference eFLINT modules formalising them, 'domain_context' paraphrases the scenario's own (English) comments.",
+  "samples": [
+    {
+      "id": "dmi-normal-transaction",
+      "title": "DMI Afsprakenstelsel — normal transaction (art. 2.1, 2.3c, 7.2)",
+      "language": "nl",
+      "articles": ["2.1", "2.3c", "7.2"],
+      "modules": ["artikel2/artikel2.1.eflint", "artikel2/artikel2.3c.eflint", "artikel7/artikel7.2.eflint"],
+      "example": "examples/afsprakenstelsel/pass-normal-transaction-en.eflint",
+      "domain_context": "Two participants of the DMI ecosystem: Amy (a large private organisation) and Bob (a small private organisation), both admitted on 1 October 2025. Each has offered something as Commons on or before that day. Amy offers the product 'Appel' in the Products and Services Catalogue for 500 euros; Bob responds to the offer, both parties sign the resulting agreement and Bob then takes (consumes) the product. The transaction is a normal (paid) one, not Commons. Expected outcome: no violation."
+    },
+    {
+      "id": "dmi-commons-transaction",
+      "title": "DMI Afsprakenstelsel — Commons transaction (art. 2.1, 2.3c, 7.2, 7.3, 7.9, 7.13)",
+      "language": "nl",
+      "articles": ["2.1", "2.3c", "7.2", "7.3", "7.9", "7.13"],
+      "modules": ["artikel2/artikel2.1.eflint", "artikel2/artikel2.3c.eflint", "artikel7/artikel7.2.eflint",
+                  "artikel7/artikel7.3.eflint", "artikel7/artikel7.9.eflint", "artikel7/artikel7.13.eflint"],
+      "example": "examples/afsprakenstelsel/pass-commons-transaction-en.eflint",
+      "domain_context": "Two participants of the DMI ecosystem: Amy (a large private organisation) and Bob (a small private organisation), both admitted on 1 October 2025. Bob still has a Commons budget of 1500 euros towards Amy for 2025, and both have offered something as Commons on or before that day. Amy's product 'Appel' is commercially available, and she offers it as Commons for 500 euros. Bob responds to the offer as Commons at the agreed price of 500 euros, declares that he (the recipient) pays the costs of the general facilities and that he will use the Commons for non-commercial purposes only. Both parties sign the agreement and Bob then takes the product. Expected outcome: no violation."
+    },
+    {
+      "id": "dmi-data-transaction",
+      "title": "DMI Afsprakenstelsel — data transaction (art. 2.1, 2.3c, 7.2, 7.12)",
+      "language": "nl",
+      "articles": ["2.1", "2.3c", "7.2", "7.12"],
+      "modules": ["artikel2/artikel2.1.eflint", "artikel2/artikel2.3c.eflint", "artikel7/artikel7.2.eflint",
+                  "artikel7/artikel7.12.eflint"],
+      "example": "examples/afsprakenstelsel/pass-data-transaction-en.eflint",
+      "domain_context": "Two participants of the DMI ecosystem: Amy (a large private organisation) and Bob (a small private organisation), both admitted on 1 October 2025. Each has offered something as Commons on or before that day. Amy offers the dataset 'AppelData' for 1000 euros; Bob responds and they agree on 500 euros. For the use of the data Bob declares that it does not conflict with laws and regulations and that the holder of the data has approved it. Both parties sign the agreement and Bob then takes the data. Expected outcome: no violation."
+    },
+    {
+      "id": "dmi-gdpr-transaction",
+      "title": "DMI Afsprakenstelsel — transaction with personal data (art. 2.1, 2.3c, 3.1, 7.2, 7.12 + AVG)",
+      "language": "nl",
+      "articles": ["2.1", "2.3c", "3.1", "7.2", "7.12", "AVG 4", "AVG 5(1)(b)", "AVG 6(1)", "AVG 6(4)", "AVG 7(1)", "AVG 12(1)"],
+      "modules": ["artikel2/artikel2.1.eflint", "artikel2/artikel2.3c.eflint", "artikel3/artikel3.eflint",
+                  "artikel3/gdpr.eflint", "artikel7/artikel7.2.eflint", "artikel7/artikel7.12.eflint"],
+      "example": "examples/afsprakenstelsel/pass-gdpr-transaction-en.eflint",
+      "domain_context": "Two participants of the DMI ecosystem: Amy (a large private organisation) and Bob (a small private organisation), both admitted on 1 October 2025. Each has offered something as Commons on or before that day. The dataset 'ClingoLovers' contains personal data of the data subject Dennis Groot. Amy is the controller for collecting and for analysing the data; Amy and Bob are processors for the purpose 'send funny email', whose legal basis Amy claims is vital interests. Amy states that collecting and analysing are prerequisites of that purpose and that the purpose is sufficiently specific, and she informs the data subject. Amy offers the data (processing action: collecting, purpose: send funny email) for 1000 euros; Bob responds (processing action: analysing, same purpose) and they agree on 500 euros. Bob declares that the use does not conflict with laws and regulations and that the holder approved it. Both parties sign the agreement and Bob takes the data. Expected outcome: no violation."
+    }
+  ]
+}

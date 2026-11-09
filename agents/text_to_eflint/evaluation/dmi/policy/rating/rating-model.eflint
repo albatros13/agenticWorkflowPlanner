@@ -1,0 +1,47 @@
+// MODEL.eflint
+//   Door Tim Müller
+//
+// Beschrijving:
+//   Beschrijft het conceptuele model dat de rating van Deelnemers berekent.
+//
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// MODEL /////
+/// Mag geschillen beslechten en straffen uitdelen.
+Bool [DMI-Beheerder]
+    Derived from [DMI-Beheerder]() // NOTE: Gebruik haakjes, anders gaat het alsnog itereren over een lege set.
+
+
+
+/// Definieert dat sommige Deelnemers ook als auditor mogen dienen.
+Fact auditor Identified by [Deelnemer]
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach auditor: auditor.[Deelnemer])
+
+
+
+/// Definieert de rating.
+Fact [Rating] Identified by A, B, C, D, E, F, G, WIT
+    Derived from (Foreach [Rating]: [Rating]) // NOTE: Geen `Holds when`, de Haskell Clingo reasoner vindt dat niet leuk
+
+
+
+/// Definieert wat de rating van een Deelnemer is op een bepaalde dag.
+///
+/// Dit is de target feit wat we willen afleiden.
+Fact deelnemer-rating Identified by [Deelnemer] * [Rating]
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach deelnemer-rating: deelnemer-rating.[Deelnemer])
+Extend Fact [Rating]
+    Derived from (Foreach deelnemer-rating: deelnemer-rating.[Rating])
+
+
+
+
+
+///// EINDE /////
+.

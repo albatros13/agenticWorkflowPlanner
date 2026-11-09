@@ -8,8 +8,9 @@ Free-form prose that later gets parsed is intentionally not part of this API
 from __future__ import annotations
 
 import abc
-import json
+import importlib
 from dataclasses import dataclass
+from typing import Callable
 
 
 class LLMError(RuntimeError):
@@ -48,12 +49,23 @@ class LLMProvider(abc.ABC):
     ) -> LLMResult:
         """Return a JSON object conforming to ``schema``."""
 
-    @staticmethod
-    def _loads(text: str) -> dict:
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-            raise LLMError(f"Model did not return valid JSON: {exc}") from exc
-        if not isinstance(obj, dict):
-            raise LLMError("Structured response must be a JSON object")
-        return obj
+
+def import_api_function(module: str, function: str, *, sdk: str) -> Callable:
+    """Lazily import the SDK call ``module.function`` from the ``api/`` package.
+
+    Only a missing *SDK* (``sdk``) is reported as "not installed"; any other import failure
+    (a broken ``api`` module, a missing ``api`` package in a deployment) is reported as such
+    instead of being disguised as a missing dependency.
+    """
+    try:
+        return getattr(importlib.import_module(module), function)
+    except ModuleNotFoundError as exc:
+        missing = exc.name or ""
+        if missing == sdk or missing.startswith(sdk + ".") or (not missing and f"'{sdk}'" in str(exc)):
+            raise LLMError(
+                f"The '{sdk}' package is not installed. Install it with "
+                f"`pip install .[llm]` to use the {sdk} provider."
+            ) from exc
+        raise LLMError(f"Cannot load the {sdk} client {module}: {exc}") from exc
+    except (ImportError, AttributeError) as exc:
+        raise LLMError(f"Cannot load the {sdk} client {module}.{function}: {exc}") from exc

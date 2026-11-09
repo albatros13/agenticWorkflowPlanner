@@ -61,6 +61,9 @@ def vectorize_document(
         distance=profile.qdrant.distance,
         recreate=profile.qdrant.recreate_collection,
     )
+    # Point ids are stable per (doc_id, chunk_id), but a changed chunking (max_chars, chunker
+    # version) yields a different chunk set: drop the document's old chunks before writing.
+    store.delete_document(document.id)
 
     points = [
         {
@@ -78,7 +81,7 @@ def vectorize_document(
                 "line_end": chunk.location.line_end,
             },
         }
-        for chunk, vector in zip(chunks, vectors)
+        for chunk, vector in zip(chunks, vectors, strict=True)
     ]
     upserted = store.upsert(points)
 

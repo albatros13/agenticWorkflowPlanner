@@ -13,48 +13,16 @@ from __future__ import annotations
 import os
 import uuid
 
-from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from agents.contract import AgentRequest, AgentResult
-from agents.contract.models import Job, JobStatus
+from agents.contract import AgentRequest
+from agents.contract.service import make_agent_app
 
 from .agent import VERIFY_EFLINT, EflintVerifierHandler
 from .schemas import VerifyRequest, VerifyResponse
 
-app = FastAPI(title="eflint_verifier agent")
 _handler = EflintVerifierHandler()
-_jobs: dict[str, Job] = {}  # in-memory job table (reports persist under runs/)
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
-@app.get("/agent/manifest")
-def manifest() -> dict:
-    return _handler.manifest().model_dump()
-
-
-@app.post("/agent/invoke_sync")
-def invoke_sync(request: AgentRequest) -> AgentResult:
-    return _handler.handle(request)
-
-
-@app.post("/agent/invoke")
-def invoke(request: AgentRequest) -> Job:
-    job_id = uuid.uuid4().hex[:12]
-    result = _handler.handle(request)
-    job = Job(job_id=job_id, status=JobStatus.succeeded if result.ok else JobStatus.failed,
-              result=result, error=result.error)
-    _jobs[job_id] = job
-    return job
-
-
-@app.get("/agent/jobs/{job_id}")
-def job_status(job_id: str) -> Job:
-    return _jobs.get(job_id, Job(job_id=job_id, status=JobStatus.failed, error="unknown job"))
+app = make_agent_app("eflint_verifier agent", lambda: _handler)  # shared contract endpoints
 
 
 @app.post("/verify", response_model=VerifyResponse)

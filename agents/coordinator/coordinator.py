@@ -1,6 +1,6 @@
 """The coordinator: intent -> project resolution -> state-gated action -> route -> persist.
 
-Flow per message (COORDINATOR_PLAN sec 6):
+Flow per message:
 
 1. classify intent + slots;
 2. resolve the project (create new / open existing / find similar via the semantic cache);
@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from agents.contract import AgentRequest, AgentResult, AgentRegistry
 from agents.contract.models import JobStatus
+from agents.eflint_verifier.pnml import normalize_pnml, pn_transitions
 
 from .cache.base import SemanticProjectCache, SimilarProject
 from .cache.noop import NoOpSemanticCache
@@ -73,6 +74,7 @@ class Coordinator:
         self.machine = machine
         self.cache = cache or NoOpSemanticCache()
         self.classifier = classifier or HeuristicIntentClassifier()
+        self._registered = frozenset(registry.intents())
 
     # --- public entry point ----------------------------------------------------
     def handle_message(
@@ -127,13 +129,22 @@ class Coordinator:
             return self._list_vectorized(project, slots)
         if intent == I.SEARCH_VECTORS:
             return self._search_vectors(project, slots)
-        if intent in self.registry.intents():  # an agent registered without a dedicated route
+        if intent in self._registered:  # an agent registered without a dedicated route
             return self._route_registered(project, intent, slots, prose, attachments, bpmn_xml)
         return CoordinatorResponse(
             reply="I couldn't tell what you'd like to do. " + self._capabilities_text(),
             intent=I.UNKNOWN,
             needs_input=True,
         )
+
+    def delete_project(self, project: Project) -> None:
+        """Remove a project with everything kept for it (store, semantic cache, hand-off area).
+        The single implementation, used by the chat flow and the REST endpoint."""
+        self.machine.apply(project.state, "deleteProject")  # validates it's allowed
+        self.store.delete(project.user_id, project.id)
+        self.cache.remove(project.id)
+        if self.handoff:
+            self.handoff.remove(project.id)
 
     # --- intent handlers -------------------------------------------------------
     def _list(self, user_id: str) -> CoordinatorResponse:
@@ -180,11 +191,7 @@ class Coordinator:
         project = self._load(user_id, pid)
         if project is None:
             return self._no_project(I.DELETE_PROJECT)
-        self.machine.apply(project.state, "deleteProject")  # validates it's allowed
-        self.store.delete(user_id, project.id)
-        self.cache.remove(project.id)
-        if self.handoff:
-            self.handoff.remove(project.id)
+        self.delete_project(project)
         return CoordinatorResponse(reply=f"Deleted project '{project.name}'.", intent=I.DELETE_PROJECT)
 
     def _revise(self, user_id: str, pid: str | None, slots: dict) -> CoordinatorResponse:
@@ -208,9 +215,12 @@ class Coordinator:
     def _engineer(self, user_id: str, pid: str | None, slots: dict, text: str) -> CoordinatorResponse:
         description = slots.get("process_description", text)
         project = self._load(user_id, pid)
+        if project is None and pid:
+            return self._no_project(I.ENGINEER_PROCESS)  # never silently replace a named project
         if project is None:  # implicit new project from the description
             project = self._create_project(user_id, slots.get("project_name"), description)
             self._apply(project, I.ENGINEER_PROCESS, "createDescription", summary="Captured description")
+            self.store.save(project)  # persisted before any early return below
 
         action = _engineer_action(project.state)
         if action is None or not self.machine.can(project.state, action):
@@ -219,40 +229,24 @@ class Coordinator:
                 f"Engineering a model isn't applicable in state {project.state}.",
             )
 
-        agent = self.registry.get_for_intent("engineer_process")
-        if agent is None:
+        result = self._invoke(I.ENGINEER_PROCESS, {"text": description, "process_name": project.name}, project)
+        if result is None:
             return self._refused(project, I.ENGINEER_PROCESS, "The text->BPMN agent is not available.")
-
-        result = agent.invoke(
-            AgentRequest(
-                intent="engineer_process",
-                project_id=project.id,
-                correlation_id=uuid.uuid4().hex,
-                payload={"text": description, "process_name": project.name},
-            )
-        )
         if not result.ok:
-            project.record(HistoryEntry(intent=I.ENGINEER_PROCESS, agent=result.agent, summary=f"Agent failed: {result.error}"))
-            self.store.save(project)
-            return CoordinatorResponse(
-                reply=f"The model could not be generated: {result.error}",
-                intent=I.ENGINEER_PROCESS, project=project.ref(), state=project.state,
-                allowed_actions=self.machine.allowed_actions(project.state), agent_result=result,
-            )
+            self._record(project, I.ENGINEER_PROCESS, result, f"Agent failed: {result.error}")
+            return self._reply(project, I.ENGINEER_PROCESS, agent_result=result,
+                               reply=f"The model could not be generated: {result.error}")
 
-        if result.artifacts_ref:
-            project.runs.append(result.artifacts_ref)
         if self.handoff and result.output.get("bpmn_xml"):
             self.handoff.save_bpmn(project.id, result.output["bpmn_xml"])
             self.handoff.discard(project.id, H.PNML)  # the Petri net of the old model is stale
+        if result.artifacts_ref:
+            project.runs.append(result.artifacts_ref)
         self._apply(project, I.ENGINEER_PROCESS, action, agent=result.agent, summary="Generated/updated BPMN model")
         self.store.save(project)
         self.cache.index_project(project)
-        return CoordinatorResponse(
-            reply=f"Generated a BPMN model for '{project.name}' (now {project.state}).",
-            intent=I.ENGINEER_PROCESS, project=project.ref(), state=project.state,
-            allowed_actions=self.machine.allowed_actions(project.state), agent_result=result,
-        )
+        return self._reply(project, I.ENGINEER_PROCESS, agent_result=result,
+                           reply=f"Generated a BPMN model for '{project.name}' (now {project.state}).")
 
     def _verify(self, user_id: str, pid: str | None, slots: dict | None = None,
                 attachments: dict | None = None, bpmn_xml: str | None = None) -> CoordinatorResponse:
@@ -268,14 +262,32 @@ class Coordinator:
                 project, I.VERIFY_MODEL,
                 f"Verification isn't applicable in state {project.state}; mark the model ready first.",
             )
-        agent = self.registry.get_for_intent("verify_model")
-        if agent is None:
+        payload: dict = {"text": project.description}
+        model = bpmn_xml or (self.handoff.load_bpmn(project.id) if self.handoff else None)
+        if model:
+            payload["bpmn_xml"] = model
+        result = self._invoke(I.VERIFY_MODEL, payload, project)
+        if result is None:
             return self._refused(
                 project, I.VERIFY_MODEL,
                 "A verification agent isn't wired in yet (planned external agent).",
             )
-        # (When a verify agent exists, invoke it here and transition on its verdict.)
-        return self._refused(project, I.VERIFY_MODEL, "Verification agent not implemented.")
+        # A verification agent reports output.verdict = passed | failed; anything else is recorded
+        # as an inconclusive run and leaves the lifecycle where it is.
+        verdict = (result.output or {}).get("verdict") if result.ok else None
+        if verdict in ("passed", "failed"):
+            self._apply(project, I.VERIFY_MODEL, "startVerification", agent=result.agent,
+                        summary="Started verification")
+            done = "completeVerificationSuccess" if verdict == "passed" else "completeVerificationFailure"
+            self._apply(project, I.VERIFY_MODEL, done, agent=result.agent, summary=f"Verification {verdict}")
+            self.store.save(project)
+            reply = f"Verification {verdict.upper()}; the project is now {project.state}."
+        else:
+            reply = (f"Verification could not be completed: {result.error}" if not result.ok
+                     else "The verification was inconclusive; the project state is unchanged.")
+            self._record(project, I.VERIFY_MODEL, result, reply)
+        return self._reply(project, I.VERIFY_MODEL, reply=reply, agent_result=result,
+                           needs_input=verdict != "passed")
 
     def _petri_net(self, user_id: str, pid: str | None, slots: dict, bpmn_xml: str | None) -> CoordinatorResponse:
         """Forward a BPMN/text -> Petri net job. Source priority: BPMN attached to the message, a
@@ -301,18 +313,12 @@ class Coordinator:
                 "To build a Petri net, paste a BPMN 2.0 model, describe the process "
                 "(e.g. 'Petri net for: ...'), or open a project that has a model."))
 
-        agent = self.registry.get_for_intent(I.GENERATE_PETRI_NET)
-        if agent is None:
-            return self._reply(project, I.GENERATE_PETRI_NET, needs_input=True,
-                               reply="The Petri net generator agent is not available.")
         if project:
             payload["model_name"] = project.name
-        result = agent.invoke(AgentRequest(
-            intent=I.GENERATE_PETRI_NET,
-            project_id=project.id if project else None,
-            correlation_id=uuid.uuid4().hex,
-            payload={**payload, "output_formats": ["pnml"]},
-        ))
+        result = self._invoke(I.GENERATE_PETRI_NET, {**payload, "output_formats": ["pnml"]}, project)
+        if result is None:
+            return self._reply(project, I.GENERATE_PETRI_NET, needs_input=True,
+                               reply="The Petri net generator agent is not available.")
         out = result.output or {}
 
         if not result.ok:
@@ -335,13 +341,9 @@ class Coordinator:
                 reply += " Assumptions: " + "; ".join(out["assumptions"])
             summary = f"Generated Petri net (PNML run {result.artifacts_ref})"
 
-        if project:
-            if result.ok and result.artifacts_ref:
-                project.runs.append(result.artifacts_ref)
-            if result.ok and self.handoff and out.get("pnml"):
-                self.handoff.save(project.id, H.PNML, out["pnml"])
-            project.record(HistoryEntry(intent=I.GENERATE_PETRI_NET, agent=result.agent, summary=summary))
-            self.store.save(project)
+        if project and result.ok and self.handoff and out.get("pnml"):
+            self.handoff.save(project.id, H.PNML, out["pnml"])
+        self._record(project, I.GENERATE_PETRI_NET, result, summary)
         return self._reply(project, I.GENERATE_PETRI_NET, reply=reply, agent_result=result,
                            needs_input=not result.ok or out.get("status") == "needs_clarification")
 
@@ -387,8 +389,6 @@ class Coordinator:
         physical, physical_from = None, ""
         pnml, origin = pick("pnml")
         pn, pn_origin = pick("pn")
-        if attachments.get("pn") and not attachments.get("pnml"):
-            pnml = None
         if pnml:
             physical, physical_from = {"language": "petri-net", "format": "pnml", "source": pnml}, f"{origin} Petri net"
         elif pn:
@@ -415,16 +415,15 @@ class Coordinator:
                                               ("qualification rules", rules)) if not value]
         if missing:
             return self._reply(project, intent, needs_input=True,
-                               reply=self._missing_inputs_reply(agent, missing, physical, eflint))
+                               reply=self._missing_inputs_reply(missing, physical, eflint))
 
         payload = {"physical": physical, "normative": {"language": "eflint", "source": eflint},
                    "qualification": rules}
         if analysis:
             payload["analysis"] = analysis
-        if slots.get("max_states") is not None:
-            payload["options"] = {"max_states": int(slots["max_states"])}
-        result = agent.invoke(AgentRequest(intent=I.VERIFY_EFLINT, project_id=project.id if project else None,
-                                           correlation_id=uuid.uuid4().hex, payload=payload))
+        if isinstance(slots.get("max_states"), int) and slots["max_states"] > 0:
+            payload["options"] = {"max_states": slots["max_states"]}
+        result = self._invoke(intent, payload, project)
         out = result.output or {}
 
         if not result.ok:
@@ -450,19 +449,19 @@ class Coordinator:
             notes.append(f"Petri net names were normalised for the verifier ({shown}); rules and analyses use the new names.")
 
         if project:
-            if result.artifacts_ref:
-                project.runs.append(result.artifacts_ref)
             verdict = out.get("verdict") if result.ok else None
             if (verdict in ("passed", "failed") and out.get("operation") in ("model-check", "compliance-check")
                     and self.machine.can(project.state, "startVerification")):
+                if result.artifacts_ref:
+                    project.runs.append(result.artifacts_ref)
                 self._apply(project, intent, "startVerification", agent=result.agent,
                             summary="Started eFLINT verification")
                 done = "completeVerificationSuccess" if verdict == "passed" else "completeVerificationFailure"
                 self._apply(project, intent, done, agent=result.agent, summary=summary)
+                self.store.save(project)
                 notes.append(f"The project is now {project.state}.")
             else:
-                project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
-            self.store.save(project)
+                self._record(project, intent, result, summary, record_failed_run=True)
         if notes:
             reply += " " + " ".join(notes)
         return self._reply(project, intent, reply=reply, agent_result=result,
@@ -470,15 +469,13 @@ class Coordinator:
 
     def _generate_pnml(self, project: Project | None, bpmn_xml: str) -> str | AgentResult:
         """BPMN -> PNML through the Petri net generator; the PNML, or the failed AgentResult."""
-        petri = self.registry.get_for_intent(I.GENERATE_PETRI_NET)
-        if petri is None:
-            return AgentResult(agent="coordinator", intent=I.GENERATE_PETRI_NET, status=JobStatus.failed,
-                               error="the Petri net generator agent is not available")
         payload = {"input_type": "bpmn_xml", "bpmn_xml": bpmn_xml, "output_formats": ["pnml"]}
         if project:
             payload["model_name"] = project.name
-        result = petri.invoke(AgentRequest(intent=I.GENERATE_PETRI_NET, project_id=project.id if project else None,
-                                           correlation_id=uuid.uuid4().hex, payload=payload))
+        result = self._invoke(I.GENERATE_PETRI_NET, payload, project)
+        if result is None:
+            return AgentResult(agent="coordinator", intent=I.GENERATE_PETRI_NET, status=JobStatus.failed,
+                               error="the Petri net generator agent is not available")
         pnml = (result.output or {}).get("pnml")
         if not result.ok or not pnml:
             if result.ok:
@@ -492,7 +489,7 @@ class Coordinator:
                 project.runs.append(result.artifacts_ref)
         return pnml
 
-    def _missing_inputs_reply(self, agent, missing: list[str], physical: dict | None, eflint: str | None) -> str:
+    def _missing_inputs_reply(self, missing: list[str], physical: dict | None, eflint: str | None) -> str:
         reply = ("To verify the process against an eFLINT specification I still need "
                  + ", ".join(missing) + ". Paste each as a fenced code block in your message — ```eflint, "
                  "```qualification (rules mapping process steps to eFLINT acts/events, ending in '.'), "
@@ -501,9 +498,7 @@ class Coordinator:
         if not eflint and self.registry.get_for_intent(I.GENERATE_EFLINT) is not None:
             reply += " I can also generate the eFLINT specification from a regulation: ask me to 'generate eFLINT from <document>'."
         if physical is not None:  # tell the user the (normalised) transition names to use in rules
-            probe = agent.invoke(AgentRequest(intent=I.VERIFY_EFLINT, correlation_id=uuid.uuid4().hex,
-                                              payload={"operation": "validate", "physical": physical}))
-            names = (probe.output or {}).get("physical_transitions")
+            names = _transition_names(physical)
             if names:
                 reply += " Process transitions: " + ", ".join(names) + "."
         if eflint:
@@ -567,11 +562,7 @@ class Coordinator:
                 reply += " It is now the project's specification, ready for eFLINT verification."
                 if had_rules:
                     reply += " Check that the project's qualification rules still match its acts and events."
-        if project:
-            if result.ok and result.artifacts_ref:
-                project.runs.append(result.artifacts_ref)
-            project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
-            self.store.save(project)
+        self._record(project, intent, result, summary)
         return self._reply(project, intent, reply=reply, agent_result=result,
                            needs_input=not result.ok or out.get("status") != "succeeded")
 
@@ -612,7 +603,7 @@ class Coordinator:
         if not result.ok:
             return self._docs_failed(project, intent, result, "The document could not be added")
         doc = result.output["document"]
-        self._record_docs(project, intent, result, f"Added document '{doc['title']}' ({doc['doc_id']})")
+        self._record(project, intent, result, f"Added document '{doc['title']}' ({doc['doc_id']})", runs=False)
         return self._reply(project, intent, agent_result=result, reply=(
             f"Added '{doc['title']}' to the document library (id {doc['doc_id']}, {doc['n_blocks']} blocks). "
             f"Say 'vectorize document {doc['doc_id']}' to make it searchable."))
@@ -651,7 +642,7 @@ class Coordinator:
         if not result.ok:
             return self._docs_failed(project, intent, result, f"'{doc['title']}' could not be vectorized")
         v = result.output["vectorization"]
-        self._record_docs(project, intent, result, f"Vectorized '{doc['title']}' into {v['collection']}")
+        self._record(project, intent, result, f"Vectorized '{doc['title']}' into {v['collection']}", runs=False)
         return self._reply(project, intent, agent_result=result, reply=(
             f"Vectorized '{doc['title']}': {v['points_upserted']} chunks in collection '{v['collection']}' "
             f"(cluster {v['cluster']}, model {v['embedding_model']}). You can now search it."))
@@ -716,12 +707,6 @@ class Coordinator:
             reply = "Which document do you mean?\n" + _document_lines(docs)
         return self._reply(project, intent, reply=reply, needs_input=True, agent_result=result)
 
-    def _record_docs(self, project: Project | None, intent: str, result: AgentResult, summary: str) -> None:
-        """The library is shared across projects; a change made from a project is noted in its history."""
-        if project:
-            project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
-            self.store.save(project)
-
     def _docs_unavailable(self, project: Project | None, intent: str) -> CoordinatorResponse:
         return self._reply(project, intent, needs_input=True, reply="The regulatory documents agent is not available.")
 
@@ -747,16 +732,14 @@ class Coordinator:
             payload["bpmn_xml"] = bpmn_xml
         result = self._invoke(intent, payload, project)
         label = intent.replace("_", " ")
+        if result is None:  # the registry knows the intent but its agent is not loaded
+            return self._reply(project, intent, needs_input=True, reply=f"No agent is available for '{label}'.")
         if not result.ok:
             reply, summary = f"'{label}' failed: {result.error}", f"{label} failed: {result.error}"
         else:
             detail = (result.output or {}).get("summary")
             reply = summary = f"{result.agent} completed '{label}'" + (f": {detail}" if detail else ".")
-        if project:
-            if result.ok and result.artifacts_ref:
-                project.runs.append(result.artifacts_ref)
-            project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
-            self.store.save(project)
+        self._record(project, intent, result, summary)
         return self._reply(project, intent, reply=reply, agent_result=result, needs_input=not result.ok)
 
     # --- helpers ---------------------------------------------------------------
@@ -767,6 +750,17 @@ class Coordinator:
             return None
         return agent.invoke(AgentRequest(intent=intent, project_id=project.id if project else None,
                                          correlation_id=uuid.uuid4().hex, payload=payload))
+
+    def _record(self, project: Project | None, intent: str, result: AgentResult, summary: str, *,
+                runs: bool = True, record_failed_run: bool = False) -> None:
+        """Note an agent call in the project's history (and its run, if it produced one) and save.
+        Agent calls outside a project (``project is None``) leave no trace in any project."""
+        if project is None:
+            return
+        if runs and result.artifacts_ref and (result.ok or record_failed_run):
+            project.runs.append(result.artifacts_ref)
+        project.record(HistoryEntry(intent=intent, agent=result.agent, summary=summary))
+        self.store.save(project)
 
     def _reply(self, project: Project | None, intent: str, *, reply: str, needs_input: bool = False,
                agent_result: AgentResult | None = None) -> CoordinatorResponse:
@@ -810,16 +804,10 @@ class Coordinator:
             return None
 
     def _ok(self, project: Project, intent: str, reply: str) -> CoordinatorResponse:
-        return CoordinatorResponse(
-            reply=reply, intent=intent, project=project.ref(), state=project.state,
-            allowed_actions=self.machine.allowed_actions(project.state),
-        )
+        return self._reply(project, intent, reply=reply)
 
     def _refused(self, project: Project, intent: str, reply: str) -> CoordinatorResponse:
-        return CoordinatorResponse(
-            reply=reply, intent=intent, project=project.ref(), state=project.state,
-            allowed_actions=self.machine.allowed_actions(project.state), needs_input=True,
-        )
+        return self._reply(project, intent, reply=reply, needs_input=True)
 
     def _no_project(self, intent: str) -> CoordinatorResponse:
         return CoordinatorResponse(
@@ -830,6 +818,17 @@ class Coordinator:
 
 _ATTACHMENT_FILES = {"eflint": H.EFLINT, "qualification": H.QUALIFICATION, "analysis": H.ANALYSIS,
                      "pnml": H.PNML, "pn": H.PETRI_NET_TEXT}
+
+
+def _transition_names(physical: dict) -> list[str]:
+    """The transition names the verifier will use for a Petri net (computed locally, no service
+    call), so a "missing inputs" reply can list them for the qualification rules."""
+    try:
+        if physical.get("format") == "pnml":
+            return normalize_pnml(physical["source"]).transitions
+        return pn_transitions(physical["source"])
+    except (ValueError, KeyError):
+        return []
 
 
 def _check_summary(output: dict) -> str:
@@ -861,9 +860,9 @@ def _hit_lines(hits: list[dict], snippet_chars: int = 240) -> str:
     return "\n".join(lines)
 
 
-def _derive_name(description: str) -> str:
-    first_line = (description or "").strip().splitlines()[0] if description.strip() else ""
-    first_line = first_line.lstrip("# ").strip()
+def _derive_name(description: str | None) -> str:
+    lines = (description or "").strip().splitlines()
+    first_line = lines[0].lstrip("# ").strip() if lines else ""
     if not first_line:
         return "Untitled project"
     return (first_line[:60] + "…") if len(first_line) > 60 else first_line

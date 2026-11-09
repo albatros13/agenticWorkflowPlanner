@@ -116,7 +116,10 @@
     </div>
     <div class="row">
       <label class="file">📄 Upload file<input id="file" type="file" accept=".txt,.md,.markdown,.text" hidden /></label>
-      <button class="ghost" id="sample" type="button">Load sample</button>
+      <select id="sampleSel" title="Load a sample text">
+        <option value="">Load sample…</option>
+        <option value="__labelling">Labelling example (EN, no reference)</option>
+      </select>
       <button class="primary" id="run" type="button">Label</button>
     </div>
     <div class="row">
@@ -167,7 +170,81 @@ The urologist prescribes medical treatment to the patient.
 The family physician assesses the IPSS and refers the patient back to the urologist.
 The Council appoints the members and regulates the composition of the committees.`;
 
-$('#sample').onclick = () => { $('#text').value = SAMPLE; $('#lang').value = 'en'; };
+// Samples with a reference eFLINT formalisation (DMI Afsprakenstelsel). While the input is the
+// unedited sample text, a generated spec is compared with the reference after generation.
+let currentSample = null;
+async function loadSampleList() {
+  try {
+    const res = await fetch('/api/samples');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    $('#sampleSel').insertAdjacentHTML('beforeend', data.samples.map(s =>
+      `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(''));
+  } catch (err) { /* samples are optional */ }
+}
+$('#sampleSel').onchange = async (e) => {
+  const id = e.target.value; e.target.value = '';
+  if (!id) return;
+  if (id === '__labelling') { currentSample = null; $('#text').value = SAMPLE; $('#lang').value = 'en'; $('#ctx').value = ''; return; }
+  $('#status').innerHTML = '<span class="spinner"></span> Loading sample…';
+  try {
+    const res = await fetch('/api/samples/' + encodeURIComponent(id));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+    currentSample = data;
+    $('#text').value = data.text; $('#lang').value = data.language; $('#ctx').value = data.domain_context;
+    $('#out').innerHTML = `<p class="muted">Loaded <b>${esc(data.title)}</b>: articles ${data.articles.map(a => esc(a.id)).join(', ')}.
+      Click <b>Generate eFLINT</b>; the result is then compared with the reference formalisation shown below.</p>`;
+    $('#badges').innerHTML = '';
+    $('#framesCard').innerHTML = referenceCard(data);
+    bindTabs('refTabs', 'refFile', refFiles(data));
+    $('#status').textContent = `Loaded sample ${data.id} · reference ${data.provenance.repository.split('/').pop()}@${data.provenance.commit.slice(0, 8)}`;
+  } catch (err) {
+    $('#status').textContent = 'Could not load the sample: ' + err.message;
+  }
+};
+function refFiles(sample) {
+  return { ...sample.reference.files, [sample.reference.example.path]: sample.reference.example.source };
+}
+function referenceCard(sample) {
+  const names = Object.keys(refFiles(sample));
+  return `<div class="card" style="margin-top:12px"><h2>Reference eFLINT (${esc(sample.provenance.license)})</h2>
+    <div class="tabs" id="refTabs">${names.map((n, i) => `<button type="button" data-f="${esc(n)}" class="${i===0?'on':''}">${esc(n.split('/').pop())}</button>`).join('')}</div>
+    <pre class="json" id="refFile">${esc(refFiles(sample)[names[0]])}</pre></div>`;
+}
+function bindTabs(tabsId, preId, filesMap) {
+  document.querySelectorAll(`#${tabsId} button`).forEach(b => b.onclick = () => {
+    document.querySelectorAll(`#${tabsId} button`).forEach(x => x.classList.remove('on')); b.classList.add('on');
+    $('#' + preId).textContent = filesMap[b.dataset.f];
+  });
+}
+async function compareWithReference(data) {
+  if (!currentSample || $('#text').value.trim() !== currentSample.text.trim() || !data.spec) return;
+  try {
+    const res = await fetch(`/api/samples/${encodeURIComponent(currentSample.id)}/compare`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spec: data.spec }),
+    });
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.detail || ('HTTP ' + res.status));
+    const pct = (v) => v === null ? '–' : Math.round(v * 100) + '%';
+    const row = (m) => `<tr><td><code>${esc(m.reference)}</code></td><td>${m.generated ? '<code>' + esc(m.generated) + '</code>' : '<span class="fail">missing</span>'}</td><td>${esc(m.kind)}</td></tr>`;
+    $('#out').insertAdjacentHTML('beforeend', `<h2 style="margin-top:14px">Comparison with the reference</h2>
+      <div class="badges">
+        <span class="badge b-info">concepts ${pct(c.concept_recall)}</span><span class="badge b-info">duties ${pct(c.duty_recall)}</span>
+        <span class="badge b-info">act preconditions ${pct(c.hook_recall)}</span><span class="badge b-info">domain model ${pct(c.domain_recall)}</span>
+        <span class="badge b-info">precision ${pct(c.precision)}</span><span class="badge b-info">articles cited ${pct(c.article_coverage)}</span>
+      </div>
+      ${c.articles_missing.length ? `<p class="muted">Articles not cited by any declaration: ${c.articles_missing.map(esc).join(', ')}</p>` : ''}
+      <details><summary>Matched declarations</summary><table><tr><th>reference</th><th>generated</th><th>kind</th></tr>
+        ${[...c.details.concepts, ...c.details.hooks, ...c.details.domain].map(row).join('')}</table></details>
+      <p class="muted" style="font-size:11.5px">Structural comparison by declaration names (Dutch/English glossary) — see docs/test_to_eflint/QA_EVAL.md.</p>`);
+    $('#framesCard').insertAdjacentHTML('beforeend', referenceCard(currentSample));
+    bindTabs('refTabs', 'refFile', refFiles(currentSample));
+  } catch (err) {
+    $('#out').insertAdjacentHTML('beforeend', `<div class="err">Comparison failed:\n${esc(err.message)}</div>`);
+  }
+}
+loadSampleList();
 
 $('#file').onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
@@ -231,11 +308,13 @@ async function generate() {
   try {
     const res = await fetch('/api/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, domain_context: $('#ctx').value, srl_hints: $('#srl').checked, language: $('#lang').value }),
+      body: JSON.stringify({ text, domain_context: $('#ctx').value, srl_hints: $('#srl').checked, language: $('#lang').value,
+                             title: currentSample && text === currentSample.text.trim() ? currentSample.title : '' }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
     renderEflint(data);
+    await compareWithReference(data);
     $('#status').textContent = `Done · ${data.provider} · run ${data.run_id}`;
     selectedRun = data.run_id;
     loadRuns();

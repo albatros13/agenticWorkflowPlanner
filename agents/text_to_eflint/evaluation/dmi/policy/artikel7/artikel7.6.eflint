@@ -1,0 +1,123 @@
+// ARTIKEL 7.6.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.6** Om kosten van in te kopen data(gebruik) zo laag mogelijk te
+//   > kunnen houden voor kennisinstituten en onderzoeksinstellingen, dienen
+//   > alle Deelnemers aan dezen data(gebruik) altijd aan te bieden als
+//   > Commons, dus vrij van kosten. Indien er inspanningen verbonden zijn
+//   > aan de distributie en/of bewerkingen van die data, dan mogen de
+//   > redelijke kosten daarvan bij de ontvanger in rekening worden gebracht.
+//   > De kennis die door desbetreffende kennisinstituten en
+//   > onderzoeksinstellingen mede door deze als Commons verstrekte data wordt
+//   > opgebouwd, dient door dezen altijd kosteloos beschikbaar te worden
+//   > gesteld aan alle Deelnemers.
+//   
+//   We formaliseren dit Artikel als dat er de mogelijkheid bestaat om een
+//   aanbod speciaal af te nemen onder dit Artikel. Dit is gevangen in het
+//   feit `overeenkomst-als-artikel-zeven-zes`.
+//   
+//   Daarna stellen we een aantal condities op aan `onderteken` die deze eisen
+//   checken als het onder dit artikel is gedaan.
+//   
+//   Als een Deelnemer onder dit artikel afneemt, dan krijgen ze de plicht
+//   opgelegd om de resulterende data weer om niet terug aan het Ecosysteem aan
+//   te bieden.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Een overeenkomst gaat worden afgesloten onder de voorwaarden van dit artikel.
+Fact reactie-als-artikel-zeven-zes Identified by reactie
+
+
+
+/// Geeft de relatie weer dat een PDD opgebouwd met de hand van een overeenkomst gedaan onder dit
+/// artikel.
+Fact pdd-resultaat-van-artikel-zeven-zes Identified by [PDD] * overeenkomst
+
+Extend Fact [PDD] Derived from (Foreach pdd-resultaat-van-artikel-zeven-zes: pdd-resultaat-van-artikel-zeven-zes.[PDD])
+
+
+
+
+
+///// BOEKHOUDING /////
+/// Stelt dat er een gratis prijs is gesteld bij een reactie.
+Fact reactie-om-niet Identified by reactie
+    Derived from (Foreach afgesproken-prijs:
+        reactie-om-niet(afgesproken-prijs.reactie)
+        When afgesproken-prijs.int == 0
+    )
+
+
+
+/// Houdt bij of een overeenkomst die gedaan is onder dit artikel ook geldig is onder dit artikel.
+Fact reactie-geldig-als-artikel-zeven-zes Identified by reactie
+    Holds when (
+        reactie-als-artikel-zeven-zes(reactie)
+        // Clausule 1: mag alleen over data gaan
+        && [Data](reactie.aanbod.[PDD])
+        // Clausule 2: mag alleen door kennisinstellingen worden gedaan
+        && deelnemer-type(reactie.afnemer, "Kennisinstelling")
+        // Clausule 3: mag niet voor pegels worden gedaan
+        && reactie-om-niet(reactie)
+    )
+
+
+
+/// Stelt dat er een gratis prijs is gesteld bij een aanbod.
+Fact aanbod-om-niet Identified by aanbod
+    Holds when Not(Exists prijs:
+        prijs.aanbod == aanbod
+        && prijs.int > 0
+    )
+
+
+
+
+
+///// NORMATIEVE LINKS /////
+/// Staat het ondertekenen van een overeenkomst als artikel 7.6 toe onder de juiste condities.
+Extend Act onderteken
+    Conditioned by (
+        // Het is óf geen artikel 7.6-afname...
+        Not(reactie-als-artikel-zeven-zes(reactie))
+        // ...of een geldige hypothetische overeenkomst
+        || reactie-geldig-als-artikel-zeven-zes(reactie)
+    )
+
+
+
+/// Stelt de plicht op dat áls een Deelnemer onder dit artikel afneemt, ze de resultaten om niet
+/// terug in het Ecosysteem moeten aanbieden.
+/// 
+/// Let erop dat dat _niet_ als Artikel 7.6 moet worden gedaan! Iedereen moet toegang krijgen tot
+/// het resultaat.
+Duty kennis-opgebouwd-met-artikel-zeven-zes-om-niet
+    Holder [Deelnemer]
+    Claimant [Ecoraad]
+    Related to overeenkomst
+    // De plicht geldt zodra een Overeenkomst is getekend namens dit artikel
+    Holds when (
+        overeenkomst.reactie.afnemer == [Deelnemer]
+        && reactie-als-artikel-zeven-zes(overeenkomst.reactie)
+    )
+    // De plicht vervalt zodra er een dataset om niets is aangeboden
+    Conditioned by Not(Exists aanbod:
+        aanbod.aanbieder == [Deelnemer]
+        && pdd-resultaat-van-artikel-zeven-zes(aanbod.[PDD], overeenkomst)
+        && aanbod-om-niet(aanbod)
+    )
+    // Er is geen violation conditie! Hoe weten we dat ze het niet hebben gedaan?
+    Violated when False
+
+
+
+
+
+///// EINDE /////
+.

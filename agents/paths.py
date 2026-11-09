@@ -1,7 +1,7 @@
 """Canonical filesystem locations for the agent layer.
 
 Overridable via env vars so the same code runs embedded (dev) or as separate services (prod)
-without edits — see COORDINATOR_PLAN sec 10.
+without edits — see ``docs/planning-instructions/coordinator/IMPLEMENTATION_PLAN.md``.
 """
 from __future__ import annotations
 

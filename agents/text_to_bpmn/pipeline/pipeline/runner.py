@@ -7,6 +7,7 @@ raises instead of silently continuing (guideline Step 1). BPMN compilation
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from ..bpmn.compiler import BpmnCompiler, CompiledModel
@@ -20,12 +21,16 @@ from ..ingestion.pdf_loader import PdfLoader
 from ..ir.models import Process
 from ..llm.base import LLMProvider
 from ..logic.interpreter import ProcessLogicInterpreter
-from ..retrieval.base import EvidenceIndex
-from ..retrieval.in_memory import InMemoryEvidenceIndex
 from ..terminology.resolver import TerminologyResolver
 from .artifacts import ArtifactStore
 
 _LOADERS: list[DocumentLoader] = [MarkdownLoader(), PdfLoader()]
+
+
+@lru_cache(maxsize=1)
+def _default_resolver() -> TerminologyResolver:
+    """The bundled terminology config, parsed once per process (the resolver is read-only)."""
+    return TerminologyResolver.from_config()
 
 
 class Pipeline:
@@ -35,14 +40,12 @@ class Pipeline:
         *,
         store: ArtifactStore,
         settings: Settings | None = None,
-        index: EvidenceIndex | None = None,
         resolver: TerminologyResolver | None = None,
     ):
         self.provider = provider
         self.store = store
         self.settings = settings or Settings.from_env()
-        self.index = index or InMemoryEvidenceIndex()
-        self.resolver = resolver or TerminologyResolver.from_config()
+        self.resolver = resolver or _default_resolver()
         self._chunker = SemanticChunker()
 
     def _meta(self, extra: dict | None = None) -> dict:
@@ -74,7 +77,6 @@ class Pipeline:
             meta=self._meta({"document_hash": ArtifactStore.content_hash(document.text)}),
         )
         chunks = self._chunker.chunk(document)
-        self.index.index(chunks)
         self.store.save("chunks", chunks, meta=self._meta({"n_chunks": len(chunks)}))
         return document
 
@@ -121,7 +123,3 @@ class Pipeline:
         process = self.interpret(process_name=process_name)
         self.ground_terminology()
         return process
-
-    def run_through_bpmn(self, path: Path, *, process_name: str = "") -> CompiledModel:
-        self.run_through_terminology(path, process_name=process_name)
-        return self.compile_bpmn()

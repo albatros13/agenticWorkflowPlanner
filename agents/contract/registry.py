@@ -50,8 +50,13 @@ class AgentRegistry:
         intent_map: dict[str, str] = {}
         descriptions: dict[str, str] = {}
 
+        claimed: dict[str, str] = {}  # intent -> agent, over *all* entries (wired or not)
         for entry in spec.get("agents", []):
             name = entry["name"]
+            for intent in entry.get("intents", []):
+                if claimed.setdefault(intent, name) != name:
+                    raise RegistryError(
+                        f"Intent {intent!r} is claimed by both {claimed[intent]!r} and {name!r}")
             transport = entry.get("transport", "in_process")
             descriptions[name] = entry.get("description", "")
 

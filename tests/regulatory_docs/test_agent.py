@@ -1,5 +1,4 @@
 """End-to-end agent flow through the shared contract — offline (hash + in-memory store)."""
-import pytest
 
 from agents.contract import AgentRegistry, AgentRequest
 from agents.regulatory_docs.agent import (

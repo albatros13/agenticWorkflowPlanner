@@ -1,0 +1,101 @@
+// ARTIKEL 2.1.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **2.1** Toetreding tot het DMI-ecosysteem vindt plaats door:  
+//   > a) het invullen en elektronisch indienen van een rechtsgeldig
+//   >    ondertekend toetredingsformulier op de website van het DMI-ecosysteem
+//   >    waarin aspirant Deelnemer verklaart te zullen handelen conform het
+//   >    Afsprakenstelsel, naar aanleiding waarvan controle zal plaatsvinden
+//   >    of er geen juridische belemmeringen zijn op grond van Europese of
+//   >    Nederlandse wet- en regelgeving;  
+//   > b) betaling van de Deelnemersbijdrage. Pas na verwerking van de
+//   >    verschuldigde Deelnemersbijdrage wordt aspirant volwaardig
+//   >    Deelnemer en daarmee toegang verleend tot het DMI-ecosysteem.
+// 
+//   Het artikel stelt ook nog wat meer, maar dat negeren we. In plaats daarvan
+//   focussen we ons alleen op dat de Deelnemerregistratie met ons communiceert
+//   dat aan de bovenstaande eisen wordt voldaan.
+//   
+//   Let erop: zonder Artikel 2.3c is dit artikel niet heel nuttig; dat Artikel
+//   linkt de status van toetreding pas aan of er transacties mogen worden
+//   gedaan.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT /////
+/// Registreert dat het toetredingsformulier is ontvangen en goedgekeurd.
+Fact deelnemer-toetredingsformulier-ontvangen Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-toetredingsformulier-ontvangen: deelnemer-toetredingsformulier-ontvangen.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-toetredingsformulier-ontvangen: deelnemer-toetredingsformulier-ontvangen.datum)
+
+
+
+/// Bevestigd dat er geen juridische belemmeringen zijn over de toetreding.
+/// 
+/// De datum geeft aan op welke datum de check if voltooid.
+Fact deelnemer-geen-juridische-belemmering-toetreding Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-geen-juridische-belemmering-toetreding: deelnemer-geen-juridische-belemmering-toetreding.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-geen-juridische-belemmering-toetreding: deelnemer-geen-juridische-belemmering-toetreding.datum)
+
+
+
+/// Registreert dat een Deelnemer aan de betalingsverplichting heeft voldaan.
+/// 
+/// Let erop dat dit _niet_ hetzelfde is als ook betaald (het eerste jaar is gratis).
+Fact deelnemer-betalingsverplichting-voldaan Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-betalingsverplichting-voldaan: deelnemer-betalingsverplichting-voldaan.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-betalingsverplichting-voldaan: deelnemer-betalingsverplichting-voldaan.datum)
+
+
+
+/// Leidt het toetreden van een Deelnemer automatisch af gegeven de drie feiten hierboven, waarna
+/// dit feit zal worden afgeleid.
+Extend Fact deelnemer-toegetreden
+    // We hebben drie aparte gevallen nodig om de grootste van de drie datums te vinden
+    Derived from (Foreach [Deelnemer], datum1, datum2, datum3:
+        deelnemer-toegetreden([Deelnemer], datum1)
+        When (
+            // We need the three facts present...
+            deelnemer-toetredingsformulier-ontvangen([Deelnemer], datum1)
+            && deelnemer-geen-juridische-belemmering-toetreding([Deelnemer], datum2)
+            && deelnemer-betalingsverplichting-voldaan([Deelnemer], datum3)
+            // ...and the chosen date needs to be later than the others
+            && datum-op-of-later-dan(datum1, datum2) && datum-op-of-later-dan(datum1, datum3)
+        )
+    )
+    Derived from (Foreach [Deelnemer], datum1, datum2, datum3:
+        deelnemer-toegetreden([Deelnemer], datum2)
+        When (
+            // We need the three facts present...
+            deelnemer-toetredingsformulier-ontvangen([Deelnemer], datum1)
+            && deelnemer-geen-juridische-belemmering-toetreding([Deelnemer], datum2)
+            && deelnemer-betalingsverplichting-voldaan([Deelnemer], datum3)
+            // ...and the chosen date needs to be later than the others
+            && datum-op-of-later-dan(datum2, datum1) && datum-op-of-later-dan(datum2, datum3)
+        )
+    )
+    Derived from (Foreach [Deelnemer], datum1, datum2, datum3:
+        deelnemer-toegetreden([Deelnemer], datum3)
+        When (
+            // We need the three facts present...
+            deelnemer-toetredingsformulier-ontvangen([Deelnemer], datum1)
+            && deelnemer-geen-juridische-belemmering-toetreding([Deelnemer], datum2)
+            && deelnemer-betalingsverplichting-voldaan([Deelnemer], datum3)
+            // ...and the chosen date needs to be later than the others
+            && datum-op-of-later-dan(datum3, datum1) && datum-op-of-later-dan(datum3, datum2)
+        )
+    )
+
+
+
+
+
+///// EINDE /////
+.

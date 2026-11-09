@@ -1,0 +1,108 @@
+// PASS GDPR TRANSACTION (EN).eflint
+//   by Tim Müller
+// 
+// Description:
+//   A file showcasing how to call the entire Afsprakenstelsel such that it
+//   passes _and_ all checks are being executed.
+//   
+//   This version shows the policy for a transaction that does not involve
+//   Commons, but _is_ about Data with private information in it, which the
+//   GDPR policy.
+// 
+
+// (NOTE: If you're appending, then replace this line with the contents of the entire policy. This
+//  line just tells the reasoner to do it for you.)
+#require "../../afsprakenstelsel.eflint".
+
+
+///// SCENARIO /////
+// First, declare the "technical world" of the policy
+{
+    +id("a1"). +id("r1"). +id("t1").
+    +[PDD]("ClingoLovers"). +[Data]("ClingoLovers").
+    +datum(2025, 10, 1).
+}
+
+// Then we declare participants
+{
+    +[Deelnemer]("Amy"). +deelnemer-type("Amy", "Privaat groot").
+    +[Deelnemer]("Bob"). +deelnemer-type("Bob", "Privaat klein").
+}
+
+
+
+// Now let's satisfy some policy so that Amy can start to make offers.
+{
+    // Article 2.1 & 2.3c: We must declare that they are legal participants
+    +deelnemer-toegetreden("Amy", datum(2025, 10, 1)).
+    +deelnemer-toegetreden("Bob", datum(2025, 10, 1)).
+
+    // Article 3.1: We must name our data private-info-containing.
+    // In case you don't know any subjects, just make something up. It's important that it stands
+    // in for the real ones.
+    +subject("DennisGroot").
+    +subject-of("DennisGroot", [Data]("ClingoLovers")).
+
+    // Now we will also name a controller of the data per processing action. Then the controller
+    // defines legal bases and purpose bindings and whathaveyou.
+    +controller-van("Amy", [Data]("ClingoLovers"), "Verzamelen").
+    +controller-van("Amy", [Data]("ClingoLovers"), "Analyzeren").
+    +processor-for("Amy", "Amy", "Send funny email"). // Amy has to declare herself as processor to send emails because she collected consent
+    +processor-for("Bob", "Amy", "Send funny email"). // Bob is declared processor to send emails
+    +legal-basis-vital-interests("Amy", [Data]("ClingoLovers"), "Send funny email"). // Amy claims that sending emails is justified as a vital interest
+    +prerequisite-of("Amy", "Verzamelen", "Send funny email"). // Amy claims that the action to collect information is a prerequisite of sending funny emails.
+    +prerequisite-of("Amy", "Analyzeren", "Send funny email"). // Amy claims that the action to process information is a prerequisite of sending funny emails.
+    +sufficiently-specific("Amy", "Send funny email"). // Finally, Amy also declares that the goal of sending emails is sufficiently specific.
+
+    // Article 7.2: They must have offered something on Commons before- or on the day of doing a
+    // transaction.
+    +deelnemer-heeft-commons-aangeboden("Amy", datum(2025, 10, 1)).
+    +deelnemer-heeft-commons-aangeboden("Bob", datum(2025, 10, 1)).
+
+    // Rating hook: we define the ratings of the participants
+    +deelnemer-rating("Amy", "D").
+    +deelnemer-rating("Bob", "C").
+}
+
+
+
+// Despite Amy claiming she won't need consent, she still has to inform the data subject.
++subject-geinformeerd("Amy", "DennisGroot", "Send funny email").
+
+
+
+// Amy puts her data on Apples on offer for 100000 cents (1000 euros).
++aanbod-action(aanbod("a1", Amy, ClingoLovers, 2025), "Verzamelen").
++aanbod-purpose(aanbod("a1", Amy, ClingoLovers, 2025), "Send funny email").
+maak-aanbod("Amy", "a1", "ClingoLovers", datum(2025, 10, 1)).
++prijs(aanbod("a1", "Amy", "ClingoLovers", 2025), 100000).
+
+// Bob responds to it, altering the deal a little: after bartering, the price is lower
+reageer("Bob", "r1", aanbod("a1", "Amy", "ClingoLovers", 2025), datum(2025, 10, 1)).
++afgesproken-prijs(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025)), 50000).
+
+
+
+// We inject the process with more facts now that the `reactie`-fact is available
+{
+    // Article 3.1: Bob must state what- and why the processing is being done.
+    +reactie-action(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025)), "Analyzeren").
+    +reactie-purpose(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025)), "Send funny email").
+
+    // Article 7.12: Even though it isn't (sensitive) data, there's still some promises to make.
+    +aanwending-niet-in-strijd-met-wet-en-regelgeving(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025))).
+    +aanwending-goedgekeurd-door-houder(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025))).
+}
+
+
+
+// The parties sat down and tweaked the proposal. Now everyone agrees.
+onderteken(Amy, reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025)), datum(2025, 10, 1)).
+onderteken(Bob, reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025)), datum(2025, 10, 1)).
+
+// Now Bob starts consumin'
+neem-af(Bob, Amy, "t1", overeenkomst(reactie("r1", Bob, aanbod("a1", Amy, ClingoLovers, 2025))), datum(2025, 10, 1)).
+
+
+
+// No violation!! Policy passed!!

@@ -1,0 +1,20 @@
+// AFSPRAKENSTELSEL.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Definieert het Afsprakenstelsel als geheel.
+//   
+//   Je kunt ook individuele artikelen importeren als je alleen geïnteresseerd
+//   bent in een subset.
+// 
+
+#require "./artikel1/artikel1.eflint".
+#require "./artikel2/artikel2.eflint".
+#require "./artikel3/artikel3.eflint".
+// Artikel 4 is niet automatisch gehandhaafd tijdens de MVP
+// Artikel 5 is niet automatisch gehandhaafd tijdens de MVP
+// Artikel 6 is niet automatisch gehandhaafd tijdens de MVP
+#require "./artikel7/artikel7.eflint".
+// Artikel 8 is niet automatisch gehandhaafd tijdens de MVP
+// Artikel 9 is niet automatisch gehandhaafd tijdens de MVP
+#require "./rating/hook.eflint".

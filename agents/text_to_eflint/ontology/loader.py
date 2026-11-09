@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from rdflib import Graph, Namespace
 
 if TYPE_CHECKING:  # avoid importing pyshacl at module load just for the type hint
-    from rdflib.graph import Graph as _Graph
+    pass
 
 # Canonical FLINT namespace (baseURI from flint.ttl). Bind this on graphs you build so
 # serialized output uses the ``flint:`` prefix.

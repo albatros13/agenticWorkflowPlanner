@@ -6,8 +6,9 @@ network, no API keys — this is what lets the whole pipeline run in CI.
 """
 from __future__ import annotations
 
+import json
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .base import LLMError, LLMProvider, LLMResult
 
@@ -63,8 +64,6 @@ class ScriptedLLMProvider(LLMProvider):
                 f"ScriptedLLMProvider has no response registered for task {task!r}. "
                 f"Registered: {sorted(set(self._single) | set(self._queues))}"
             )
-        import json
-
         return LLMResult(
             data=data,
             raw_text=json.dumps(data),

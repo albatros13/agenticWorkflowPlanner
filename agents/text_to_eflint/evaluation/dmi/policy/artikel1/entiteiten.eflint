@@ -1,0 +1,114 @@
+// ENTITEITEN.eflint
+//   door Tim Müller
+//
+// Beschrijving:
+//   Definieerd begrippen uit Artikel 1 die (juridische) entiteiten definieren.
+//
+
+#require "./tijd.eflint".
+
+
+///// DATA TYPES /////
+/// Bepaalt welke organisatietypes er zijn.
+Fact [Organisatietype] Identified by "Publiek", "Privaat klein", "Privaat groot", "Kennisinstelling"
+    Derived from (Foreach [Organisatietype]: [Organisatietype]). // NOTE: Geen `Holds when`, de Haskell Clingo reasoner vindt dat niet leuk
+
+
+
+
+
+///// FEITEN /////
+/// Uit het Afsprakenstelsel:
+/// > De samenwerking tussen Deelnemers met als doel duurzame oplossingen, digitaal ondersteund, te
+/// > verwezenlijken mede ten aanzien van de thema’s stedelijke verdichting, mobiliteit,
+/// > leefbaarheid, energie en milieu.
+Bool [DMI-ecosysteem]
+    Derived from [DMI-ecosysteem](). // NOTE: Gebruik haakjes, anders gaat het alsnog itereren over een lege set.
+
+
+
+/// Uit het Afsprakenstelsel:
+/// > Het hoogste beslisorgaan bestaande uit een (1) vertegenwoordiger van iedere Deelnemer, dat
+/// > beslissingen neemt over de besturing van het DMI-ecosysteem, indachtig het borgen van
+/// > continuïteit en groei.
+Bool [Ecoraad]
+    Derived from [Ecoraad](). // NOTE: Gebruik haakjes, anders gaat het alsnog itereren over een lege set.
+
+
+
+/// Uit het Afsprakenstelsel:
+/// > Iedere juridische of natuurlijke entiteit die is Toegetreden tot het DMI-ecosysteem.
+Fact [Deelnemer] Identified by String.
+
+/// Een alias voor een [Deelnemer].
+Placeholder aanbieder For [Deelnemer].
+Placeholder afnemer For [Deelnemer].
+Placeholder provider For [Deelnemer].
+
+
+
+/// Bepaalt dat Deelnemers een Organisatietype hebben.
+Fact deelnemer-type Identified by [Deelnemer] * [Organisatietype].
+
+Extend Fact [Deelnemer]
+    Derived from (Foreach deelnemer-type: deelnemer-type.[Deelnemer]).
+Extend Fact [Organisatietype]
+    Derived from (Foreach deelnemer-type: deelnemer-type.[Organisatietype]).
+
+
+
+/// Registreert dat een Deelnemer volledig is toegetreden op een bepaalde datum.
+Fact deelnemer-toegetreden Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-toegetreden: deelnemer-toegetreden.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-toegetreden: deelnemer-toegetreden.datum)
+
+
+
+/// Registreert dat de Deelnemersregistratie aangeeft dat een Deelnemer is uitgetreden.
+Fact deelnemer-uitgetreden Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-uitgetreden: deelnemer-uitgetreden.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-uitgetreden: deelnemer-uitgetreden.datum)
+
+
+
+
+
+///// BOEKHOUDING /////
+/// Een feit dat, gegeven `deelnemer-toegetreden` en `deelnemer-uitgetreden`, bekijkt of een
+/// Deelnemer een geldig lid van het Ecosysteem is op een gegeven moment.
+Fact deelnemer-lid-op Identified by [Deelnemer] * datum
+    // NOTE: We zoeken naar _een_ datum waarop dit geldt, niet _alle_ data. Zodanig kunnen we dus
+    // gevallen negeren waar een Deelnemer sinds de gevonden `deelnemer-toegetreden` is uitgetreden
+    // én weer toegetreden; de search faalt misschien voor dat specifieke feit, maar zal slagen
+    // voor de latere `deelnemer-toegetreden`.
+    Holds when (Exists deelnemer-toegetreden:
+        deelnemer-toegetreden.[Deelnemer] == [Deelnemer]
+        // De Deelnemer moet zijn toegetreden op- of voor de gegeven datum;
+        && datum-op-of-later-dan(datum, deelnemer-toegetreden.datum)
+        // En er moet geen datum van uittreding zijn die daar tussen ligt
+        && Not(Exists deelnemer-uitgetreden:
+            datum-op-of-later-dan(datum, deelnemer-uitgetreden.datum)
+            && datum-op-of-later-dan(deelnemer-uitgetreden.datum, deelnemer-toegetreden.datum)
+        )
+    )
+
+
+
+
+
+///// ASSERTIES /////
+/// Het is gek als er niet één `[DMI-ecosysteem]` is gedefinieerd.
+Invariant exact-een-dmi-ecosysteem
+    When (Count(Foreach [DMI-ecosysteem]: [DMI-ecosysteem] When [DMI-ecosysteem]) == 1).
+
+/// Het is gek als er niet één `[Ecoraad]` is gedefinieerd.
+Invariant exact-een-ecoraad
+    When (Count(Foreach [Ecoraad]: [Ecoraad] When [Ecoraad]) == 1).
+
+/// Elke Deelnemer moet een Type hebben.
+Invariant exact-een-deelnemer-type-per-deelnemer
+    When (Forall [Deelnemer]:
+        Count(Foreach deelnemer-type: deelnemer-type When deelnemer-type.[Deelnemer] == [Deelnemer]) == 1
+    ).

@@ -15,9 +15,7 @@ modules, ``spec.json``, ``report.json`` and ``input.json`` — the request that 
 from __future__ import annotations
 
 import json
-import os
 import re
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -26,7 +24,8 @@ from pydantic import ValidationError
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
-from agents.storage import agent_storage
+from agents.runs import is_run_id, new_run_id, read_json, runs_root
+from agents.text_to_bpmn.shaping import default_provider
 
 from .generation import EflintGenerator, EflintSpec, check_spec, parse_base_spec, render_files
 from .generation.convert import scenario_from_program
@@ -36,7 +35,7 @@ AGENT_NAME = "text_to_eflint"
 GENERATE_EFLINT = "generate_eflint"
 VALIDATE_EFLINT = "validate_eflint"
 
-_RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # run folder names; blocks path traversal
+MAX_REPAIR_ROUNDS = 5  # keep in sync with GENERATE_INPUT_SCHEMA["properties"]["max_repair_rounds"]
 # Request fields persisted with each run (input.json) so a browsed run shows what produced it.
 _INPUT_FIELDS = ("title", "language", "domain_context", "srl_hints", "scenarios", "max_repair_rounds",
                  "document_id", "sections")
@@ -69,13 +68,6 @@ VALIDATE_INPUT_SCHEMA = {
 }
 
 
-def _default_provider():
-    from agents.text_to_bpmn.pipeline.config import Settings  # noqa: PLC0415
-    from agents.text_to_bpmn.shaping import select_provider  # noqa: PLC0415
-
-    return select_provider(Settings.from_env())
-
-
 class TextToEflintHandler(AgentHandler):
     def __init__(
         self,
@@ -86,7 +78,7 @@ class TextToEflintHandler(AgentHandler):
         documents_dir: Path | None = None,
     ):
         self._provider = provider
-        self._provider_factory = provider_factory or _default_provider
+        self._provider_factory = provider_factory or default_provider
         self._runs_dir = runs_dir
         self._documents_dir = documents_dir
 
@@ -130,7 +122,7 @@ class TextToEflintHandler(AgentHandler):
         provider = self._provider or self._provider_factory()
         generator = EflintGenerator(
             provider,
-            max_repair_rounds=int(p.get("max_repair_rounds", 2)),
+            max_repair_rounds=_bounded_int(p.get("max_repair_rounds"), default=2, low=0, high=MAX_REPAIR_ROUNDS),
             srl_hints=bool(p.get("srl_hints", False)),
             language=p.get("language", "en"),
         )
@@ -138,7 +130,7 @@ class TextToEflintHandler(AgentHandler):
             text, title=p.get("title", ""), domain_context=p.get("domain_context", ""),
             base_spec=base, scenarios=bool(p.get("scenarios", True)),
         )
-        run_id = uuid.uuid4().hex[:12]
+        run_id = new_run_id()
         output = {"run_id": run_id, "provider": getattr(provider, "name", ""), **result.to_dict()}
         request_info = {k: p[k] for k in _INPUT_FIELDS if p.get(k) not in (None, "", [])}
         request_info["language"] = p.get("language", "en")
@@ -183,13 +175,9 @@ class TextToEflintHandler(AgentHandler):
         doc_id = p.get("document_id")
         if not doc_id:
             raise ValueError("payload.text or payload.document_id is required")
-        from agents.regulatory_docs.library import DocumentLibrary  # noqa: PLC0415
+        from agents.regulatory_docs.library import DocumentLibrary, default_library_root  # noqa: PLC0415
 
-        root = self._documents_dir or (
-            Path(os.environ["REGDOCS_DIR"]) if os.getenv("REGDOCS_DIR")
-            else agent_storage("regulatory_docs").path("documents")
-        )
-        doc = DocumentLibrary(root).load_document(doc_id)
+        doc = DocumentLibrary(self._documents_dir or default_library_root()).load_document(doc_id)
         sections = [s.lower() for s in p.get("sections") or []]
         if not sections:
             return doc.text
@@ -199,11 +187,7 @@ class TextToEflintHandler(AgentHandler):
         return "\n\n".join(blocks)
 
     def _runs(self) -> Path:
-        if self._runs_dir is not None:
-            return self._runs_dir
-        if os.getenv("EFLINT_RUNS_DIR"):
-            return Path(os.environ["EFLINT_RUNS_DIR"])
-        return agent_storage(AGENT_NAME).path("runs")
+        return runs_root(AGENT_NAME, "EFLINT_RUNS_DIR", self._runs_dir)
 
     def _save(self, run_id: str, output: dict, request_info: dict | None = None) -> None:
         run = self._runs() / run_id
@@ -228,8 +212,8 @@ class TextToEflintHandler(AgentHandler):
                 continue
             try:
                 report = json.loads((run / "report.json").read_text(encoding="utf-8"))
-                spec = _read_json(run / "spec.json") or {}
-                info = _read_json(run / "input.json") or {}
+                spec = read_json(run / "spec.json") or {}
+                info = read_json(run / "input.json") or {}
             except (OSError, ValueError):
                 continue
             created = info.get("created_at") or datetime.fromtimestamp(
@@ -249,16 +233,16 @@ class TextToEflintHandler(AgentHandler):
 
     def load_run(self, run_id: str) -> dict:
         """A stored run in the same shape as ``generate_eflint`` output, plus ``input`` (may be {})."""
-        if not _RUN_ID.match(run_id or ""):
+        if not is_run_id(run_id):
             raise KeyError(f"invalid run id {run_id!r}")
         run = self._runs() / run_id
         if not (run / "report.json").is_file():
             raise KeyError(f"no stored run {run_id!r}")
         output = json.loads((run / "report.json").read_text(encoding="utf-8"))
         output.setdefault("run_id", run_id)
-        output["spec"] = _read_json(run / "spec.json") or {}
+        output["spec"] = read_json(run / "spec.json") or {}
         output["files"] = {f.name: f.read_text(encoding="utf-8") for f in _eflint_files(run)}
-        output["input"] = _read_json(run / "input.json") or {}
+        output["input"] = read_json(run / "input.json") or {}
         for key, default in (("findings", []), ("scenarios", []), ("notes", []), ("history", []), ("rounds", 0)):
             output.setdefault(key, default)
         return output
@@ -268,8 +252,15 @@ class TextToEflintHandler(AgentHandler):
         return AgentResult(agent=AGENT_NAME, intent=intent, status=JobStatus.failed, error=error)
 
 
-def _read_json(path: Path) -> dict | None:
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+def _bounded_int(value, *, default: int, low: int, high: int) -> int:
+    """``value`` as an int clamped to ``[low, high]`` (the manifest schema is not enforced for
+    in-process callers, and every repair round is an LLM call)."""
+    if value is None or value == "":
+        return default
+    try:
+        return max(low, min(int(value), high))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"expected an integer, got {value!r}") from exc
 
 
 def _eflint_files(run: Path) -> list[Path]:

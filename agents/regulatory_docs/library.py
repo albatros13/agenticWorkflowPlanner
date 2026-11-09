@@ -14,17 +14,21 @@ Qdrant (see :mod:`.vectorizer`).
 from __future__ import annotations
 
 import hashlib
-import json
+import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+from agents.storage import agent_storage
 
 from agents.text_to_bpmn.pipeline.ingestion.base import Document, DocumentLoader
 from agents.text_to_bpmn.pipeline.ingestion.markdown_loader import MarkdownLoader
 from agents.text_to_bpmn.pipeline.ingestion.pdf_loader import PdfLoader
 
 _PREVIEW_CHARS = 240
+_DOC_ID = re.compile(r"^[0-9a-f]{12}$")  # see _doc_id: a 12-hex-digit content hash
 
 
 class DocumentRecord(BaseModel):
@@ -86,6 +90,12 @@ class DocumentLibrary:
         return self._store(document, kind=kind, title=name or path.name)
 
     # ---- find / read ---------------------------------------------------------
+    def ids(self) -> set[str]:
+        """Ids of the stored documents, from the folder names alone (no metadata parsing)."""
+        if not self.root.is_dir():
+            return set()
+        return {d.name for d in self.root.iterdir() if _DOC_ID.match(d.name) and (d / "meta.json").is_file()}
+
     def find(self, query: str | None = None) -> list[DocumentRecord]:
         records = [self._read_meta(d) for d in sorted(self.root.iterdir()) if d.is_dir()]
         records = [r for r in records if r is not None]
@@ -95,14 +105,20 @@ class DocumentLibrary:
         records.sort(key=lambda r: r.created_at, reverse=True)
         return records
 
+    def _doc_dir(self, doc_id: str) -> Path:
+        """The folder of ``doc_id``; an id that is not a content hash cannot exist (KeyError)."""
+        if not isinstance(doc_id, str) or not _DOC_ID.match(doc_id):
+            raise KeyError(f"No document with id {doc_id!r}")
+        return self.root / doc_id
+
     def get(self, doc_id: str) -> DocumentRecord:
-        meta = self._read_meta(self.root / doc_id)
+        meta = self._read_meta(self._doc_dir(doc_id))
         if meta is None:
             raise KeyError(f"No document with id {doc_id!r}")
         return meta
 
     def load_document(self, doc_id: str) -> Document:
-        path = self.root / doc_id / "document.json"
+        path = self._doc_dir(doc_id) / "document.json"
         if not path.is_file():
             raise KeyError(f"No document with id {doc_id!r}")
         return Document.model_validate_json(path.read_text(encoding="utf-8"))
@@ -161,3 +177,10 @@ class DocumentLibrary:
     @staticmethod
     def _doc_id(data: bytes) -> str:
         return hashlib.sha1(data).hexdigest()[:12]
+
+
+def default_library_root() -> Path:
+    """The regulatory document library: ``REGDOCS_DIR`` if set, else the agent's private storage.
+    The one definition shared by the regulatory_docs agent and the agents that read its documents."""
+    env = os.getenv("REGDOCS_DIR")
+    return Path(env) if env else agent_storage("regulatory_docs").path("documents")

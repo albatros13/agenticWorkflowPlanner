@@ -92,7 +92,7 @@ def run(run_id: str) -> dict:
     try:
         return _handler().load_run(run_id)
     except KeyError as exc:
-        raise HTTPException(404, str(exc.args[0]))
+        raise HTTPException(404, str(exc.args[0])) from exc
 
 
 # --- inputs from other agents' storage -------------------------------------------------------
@@ -148,7 +148,7 @@ def source_spec(run_id: str) -> dict:
     try:
         run_data = _eflint_store().load_run(_check_ref(run_id))
     except KeyError as exc:
-        raise HTTPException(404, str(exc.args[0]))
+        raise HTTPException(404, str(exc.args[0])) from exc
     files = run_data.get("files", {})
     if "spec.eflint" not in files:
         raise HTTPException(404, f"run {run_id!r} has no self-contained spec.eflint")

@@ -1,0 +1,38 @@
+// KOSTEN.eflint
+//   door Tim Müller
+// 
+// Beschrijving
+//   Definieert de verschillende kosten gemoeid met transacties.
+//
+
+#require "./pdd.eflint".
+#require "./model.eflint".
+
+
+///// FEITEN /////
+/// Definieert de marktwaarde wat een PDD (zou) hebben.
+Fact marktwaarde Identified by [PDD] * int
+
+Extend Fact [PDD] Derived from (Foreach marktwaarde: marktwaarde.[PDD])
+Extend Fact int Derived from (Foreach marktwaarde: marktwaarde.int)
+
+
+
+/// Definieert de prijs waarvoor een PDD is aangeboden.
+Fact prijs Identified by aanbod * int
+
+Extend Fact int Derived from (Foreach prijs: prijs.int)
+
+
+
+/// Definieert de prijs waarvoor een PDD daadwerkelijk is afgenomen.
+Fact afgesproken-prijs Identified by reactie * int
+
+Extend Fact int Derived from (Foreach afgesproken-prijs: afgesproken-prijs.int)
+
+
+
+
+
+///// EINDE /////
+.

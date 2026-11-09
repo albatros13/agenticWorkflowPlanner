@@ -1,5 +1,4 @@
 """Browsing stored eFLINT runs (agent helpers + demo endpoints) and truncated-output detection."""
-import json
 from types import SimpleNamespace
 
 import pytest
@@ -76,7 +75,7 @@ def test_anthropic_truncated_tool_output_is_reported(monkeypatch):
     client = pytest.importorskip("api.anthropic_client")
     response = SimpleNamespace(stop_reason="max_tokens",
                                content=[SimpleNamespace(type="tool_use", input={"facts": [{"source": "x"}]})])
-    monkeypatch.setattr(client, "ANTHROPIC_API_KEY", "test")
-    monkeypatch.setattr(client, "llm_client", SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: response)))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(client, "_client", lambda key: SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: response)))
     with pytest.raises(RuntimeError, match="truncated at max_tokens=100"):
-        client.ask_anthropic_structured(task="t", system="s", prompt="p", schema={}, max_tokens=100)
+        client.ask_anthropic_structured(task="t", system="s", prompt="p", schema={}, max_tokens=100, model="m")

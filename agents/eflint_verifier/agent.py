@@ -22,9 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,7 +30,7 @@ from pydantic import ValidationError
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
-from agents.storage import agent_storage
+from agents.runs import is_run_id, new_run_id, read_json, runs_root
 
 from .client import EflintVerifierClient, VerifierError
 from .config import VerifierSettings
@@ -43,7 +41,6 @@ log = logging.getLogger(__name__)
 
 AGENT_NAME = "eflint_verifier"
 VERIFY_EFLINT = "verify_eflint"
-_RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # run folder names; blocks path traversal
 
 
 def infer_operation(analysis: str | None) -> str:
@@ -138,11 +135,7 @@ class EflintVerifierHandler(AgentHandler):
         return self._client or EflintVerifierClient(self._settings_())
 
     def _runs(self) -> Path:
-        if self._runs_dir is not None:
-            return self._runs_dir
-        if os.getenv("EFLINT_VERIFIER_RUNS_DIR"):
-            return Path(os.environ["EFLINT_VERIFIER_RUNS_DIR"])
-        return agent_storage(AGENT_NAME).path("runs")
+        return runs_root(AGENT_NAME, "EFLINT_VERIFIER_RUNS_DIR", self._runs_dir)
 
     @staticmethod
     def _fail(intent: str, error: str, output: dict | None = None, run_id: str | None = None) -> AgentResult:
@@ -161,7 +154,7 @@ class EflintVerifierHandler(AgentHandler):
 
         client = self._client_()
         service_url = client.settings.base_url
-        run_id = uuid.uuid4().hex[:12]
+        run_id = new_run_id()
 
         # 1. Physical model: normalise PNML, learn the transition names.
         physical = req.physical.model_dump()
@@ -294,14 +287,13 @@ class EflintVerifierHandler(AgentHandler):
 
     def load_run(self, run_id: str) -> dict:
         """``{run_id, report, request}`` of a recorded verification (``request`` may be ``{}``)."""
-        if not _RUN_ID.match(run_id or ""):
+        if not is_run_id(run_id):
             raise KeyError(f"invalid run id {run_id!r}")
         run = self._runs() / run_id
         if not (run / "report.json").is_file():
             raise KeyError(f"no recorded verification {run_id!r}")
         report = json.loads((run / "report.json").read_text(encoding="utf-8"))
-        request_path = run / "request.json"
-        request = json.loads(request_path.read_text(encoding="utf-8")) if request_path.is_file() else {}
+        request = read_json(run / "request.json") or {}
         return {"run_id": run_id, "report": report, "request": request}
 
 
@@ -314,8 +306,8 @@ def _property(r: dict) -> PropertyResult:
                           witness=witness, completion=r.get("completion"))
 
 
+__all__ = ["EflintVerifierHandler", "VERIFY_EFLINT", "AGENT_NAME"]
+
+
 def _strip_comments(text: str) -> str:
     return re.sub(r"//[^\n]*", "", text)
-
-
-__all__ = ["EflintVerifierHandler", "VERIFY_EFLINT", "AGENT_NAME"]

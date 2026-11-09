@@ -10,7 +10,6 @@ without the ``petri_net`` extra installed.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Callable
 
@@ -18,7 +17,8 @@ from pydantic import ValidationError
 
 from agents.contract import AgentHandler, AgentManifest, AgentRequest, AgentResult, Capability
 from agents.contract.models import JobStatus
-from agents.storage import agent_storage
+from agents.runs import runs_root
+from agents.text_to_bpmn.shaping import default_provider
 
 from .config import Limits
 from .schemas import GenerateRequest, GenerateResponse
@@ -27,13 +27,6 @@ log = logging.getLogger(__name__)
 
 AGENT_NAME = "petri_net_generator"
 GENERATE_PETRI_NET = "generate_petri_net"
-
-
-def _default_provider():
-    from agents.text_to_bpmn.pipeline.config import Settings  # noqa: PLC0415
-    from agents.text_to_bpmn.shaping import select_provider  # noqa: PLC0415
-
-    return select_provider(Settings.from_env())
 
 
 class PetriNetGeneratorHandler(AgentHandler):
@@ -49,7 +42,7 @@ class PetriNetGeneratorHandler(AgentHandler):
         runs_dir: Path | None = None,
     ):
         self._provider = provider
-        self._provider_factory = provider_factory or _default_provider
+        self._provider_factory = provider_factory or default_provider
         self._limits = limits
         self._runs_dir = runs_dir
 
@@ -73,11 +66,7 @@ class PetriNetGeneratorHandler(AgentHandler):
         )
 
     def _runs(self) -> Path:
-        if self._runs_dir is not None:
-            return self._runs_dir
-        if os.getenv("PETRI_NET_RUNS_DIR"):
-            return Path(os.environ["PETRI_NET_RUNS_DIR"])
-        return agent_storage(AGENT_NAME).path("runs")
+        return runs_root(AGENT_NAME, "PETRI_NET_RUNS_DIR", self._runs_dir)
 
     def _fail(self, request: AgentRequest, error: str) -> AgentResult:
         return AgentResult(agent=AGENT_NAME, intent=request.intent, status=JobStatus.failed, error=error)

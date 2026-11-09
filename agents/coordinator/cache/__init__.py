@@ -1,7 +1,7 @@
 """Semantic project cache: interface + a wired-in no-op default (implementation deferred).
 
 Lets the coordinator ask "is there an existing/similar project?" before starting a new one.
-The embedding/search itself is deferred (COORDINATOR_PLAN sec 8); only the seam ships now.
+The embedding/search itself is deferred; only the seam ships now.
 """
 from .base import SemanticProjectCache, SimilarProject
 from .noop import NoOpSemanticCache
@@ -15,7 +15,6 @@ def build_cache(kind: str = "noop", **kwargs) -> SemanticProjectCache:
     if kind == "noop":
         return NoOpSemanticCache()
     if kind == "qdrant":
-        from .qdrant import QdrantSemanticCache  # lazy: optional dep + deferred impl
-
-        return QdrantSemanticCache(**kwargs)
+        # Fail at start-up, not on the first "new project": every method of the skeleton raises.
+        raise ValueError("SEMANTIC_CACHE=qdrant is not implemented yet; use 'noop'.")
     raise ValueError(f"Unknown semantic cache kind: {kind!r}")

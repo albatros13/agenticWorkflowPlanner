@@ -1,0 +1,86 @@
+// ARTIKEL 7.2.eflint
+//   door Tim Müller
+// 
+// Beschrijving:
+//   Artikel dat stelt:
+//   > **7.2** Iedere Deelnemer moet jaarlijks ten bedrage van een door de
+//   > Ecoraad vast te stellen Eurowaarde eigen producten, diensten en/of
+//   > data(gebruik) aan elk van de andere Deelnemers beschikbaar te stellen
+//   > als Commons, even zoals iedere Deelnemer recht heeft om jaarlijks voor
+//   > datzelfde vastgestelde bedrag producten, diensten en/of datagebruik af
+//   > te nemen als Commons van elk van de andere Deelnemers.
+//   
+//   De tweede helft van het Artikel stellen we voor nu vast als een harde eis
+//   en formaliseren we als een check op overeenkomsten dat een Deelnemer
+//   voldoende Commons heeft.
+//   
+//   De eerste helft kunnen we niet op harde feiten checken. We controleren
+//   alleen maar **of** er **tenminste iets** is aangeboden als Commons.
+// 
+
+#require "../artikel1/artikel1.eflint".
+
+
+///// INPUT FEITEN /////
+/// Beschrijft dat een Deelnemer Commons iets heeft aangeboden in een bepaald jaar.
+Fact deelnemer-heeft-commons-aangeboden Identified by [Deelnemer] * datum
+
+Extend Fact [Deelnemer] Derived from (Foreach deelnemer-heeft-commons-aangeboden: deelnemer-heeft-commons-aangeboden.[Deelnemer])
+Extend Fact datum Derived from (Foreach deelnemer-heeft-commons-aangeboden: deelnemer-heeft-commons-aangeboden.datum)
+
+
+
+
+
+///// BOEKHOUDING /////
+Fact afnemer-genoeg-budget Identified by reactie
+    Holds when (
+        // Er moet tenminste één gerelateerd budget zijn
+        (Exists commons-budget:
+            commons-budget.afnemer == reactie.afnemer
+            && commons-budget.aanbieder == reactie.aanbod.aanbieder
+        // Alle budgetten moeten óf ongerelateerd zijn, óf er moet genoeg zijn
+        ) && (Forall commons-budget:
+            commons-budget.afnemer != reactie.afnemer
+            || commons-budget.aanbieder != reactie.aanbod.aanbieder
+            || commons-budget.jaar != reactie.aanbod.jaar
+            || Sum(Foreach int: (int When afgesproken-prijs(reactie, int))) <= commons-budget.int
+        )
+    )
+
+
+
+/// Een feit wat houdt als artikel 7.2 klopt óf niet van toepassing is (geen Commons).
+Fact reactie-in-lijn-met-artikel-zeven-twee Identified by [Deelnemer] * reactie
+    // Het is óf geen Commons (dan mag 't), 
+    Holds when Not(reactie-als-commons(reactie))
+    // óf de gegeven [Deelnemer] is niet de afnemer (de aanbieder hoeft hier niet violaten)
+    Holds when [Deelnemer] == reactie.aanbod.aanbieder
+    // óf geen Commons (dan mag 't), óf er is genoeg budget
+    Holds when afnemer-genoeg-budget(reactie)
+
+
+
+/// Bepaald dat een Deelnemer ooit iets heeft aangeboden voor de huidige datum.
+Fact deelnemer-ooit-iets-aangeboden-als-commons-voor Identified by [Deelnemer] * datum
+    // De Duty geldt als er een DMI-jaar is waarvoor een Deelnemer iets heeft aangeboden.
+    Holds when (Exists datum':
+        deelnemer-heeft-commons-aangeboden([Deelnemer], datum')
+        && datum-op-of-later-dan(datum, datum')
+    )
+
+
+
+
+
+///// NORMATIEVE HOOKS /////
+Extend Act onderteken
+    Conditioned by deelnemer-ooit-iets-aangeboden-als-commons-voor([Deelnemer], datum)
+    Conditioned by reactie-in-lijn-met-artikel-zeven-twee([Deelnemer], reactie)
+
+
+
+
+
+///// EINDE /////
+.

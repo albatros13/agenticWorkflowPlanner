@@ -6,20 +6,19 @@ SDK call in :mod:`api.openai_client`. See :mod:`.anthropic_provider` for the rat
 """
 from __future__ import annotations
 
-import os
-
-from .base import LLMError, LLMProvider, LLMResult
-
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
+from ..config import DEFAULT_OPENAI_MODEL
+from .base import LLMError, LLMProvider, LLMResult, import_api_function
 
 
 class OpenAIProvider(LLMProvider):
-    """Force structured output via a required function tool call (delegated to api/)."""
+    """Force structured output via a required function tool call (delegated to api/).
+
+    The API key is read from the environment (``OPENAI_API_KEY``) by the api client.
+    """
 
     name = "openai"
 
-    def __init__(self, model: str = DEFAULT_MODEL, api_key: str | None = None):
-        # ``api_key`` accepted for interface compatibility; the api client reads it from env.
+    def __init__(self, model: str = DEFAULT_OPENAI_MODEL):
         self.model = model
 
     def generate_json(
@@ -31,15 +30,9 @@ class OpenAIProvider(LLMProvider):
         schema: dict,
         max_tokens: int = 4096,
     ) -> LLMResult:
+        ask = import_api_function("api.openai_client", "ask_openai_structured", sdk="openai")
         try:
-            from api.openai_client import ask_openai_structured  # noqa: PLC0415 - lazy
-        except ImportError as exc:  # pragma: no cover - depends on optional dep
-            raise LLMError(
-                "The 'openai' package is not installed. Install it with "
-                "`pip install .[llm]` to use the OpenAI provider."
-            ) from exc
-        try:
-            data, raw_text, model = ask_openai_structured(
+            data, raw_text, model = ask(
                 task=task, system=system, prompt=prompt, schema=schema,
                 max_tokens=max_tokens, model=self.model,
             )
